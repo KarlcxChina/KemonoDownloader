@@ -38,7 +38,7 @@ I am very sorry about this, maybe I will make it fit all versions of Windows in 
 ## ToDo
 1. 合并标准版和Single版（也许会，但是再加一个选项是否太多了？）
 2. 尝试支持其他语言版本的Windows系统（我暂时不知道怎么做，也没有相关的测试环境）  
-    **2.E I'll try to support other language versions of Windows systems (I don't know how to do it for the time being, and I don't have a test environment)**
+**2.E I'll try to support other language versions of Windows systems (I don't know how to do it for the time being, and I don't have a test environment)**
 4. 提供对其他文件的下载支持
 5. 适配Linux系统
 6. 使用配置文件的方式来配置代理，以及其他参数
