@@ -38,11 +38,11 @@ I am very sorry about this, maybe I will make it fit all versions of Windows in 
 ## ToDo
 1. 合并标准版和Single版（也许会，但是再加一个选项是否太多了？）
 2. 尝试支持其他语言版本的Windows系统（我暂时不知道怎么做，也没有相关的测试环境）
-**2.E I'll try to support other language versions of Windows systems (I don't know how to do it for the time being, and I don't have a test environment)**
-3. 提供对其他文件的下载支持
-4. 适配Linux系统
-5. 使用配置文件的方式来配置代理，以及其他参数
-6. 提供一个GUI界面
+    **2.E I'll try to support other language versions of Windows systems (I don't know how to do it for the time being, and I don't have a test environment)**
+4. 提供对其他文件的下载支持
+5. 适配Linux系统
+6. 使用配置文件的方式来配置代理，以及其他参数
+7. 提供一个GUI界面
 
 ## 使用的开源项目
 本软件使用了LibCurl作为下载工具，本软件使用的是Windows下的自编译版本
