@@ -1,5 +1,5 @@
 # KemonoDownloader
-Kemono下载工具
+一个面向中文用户的Kemono下载工具
 
 ## 功能
 下载Kemono上发布的图片，暂时不支持下载图片
