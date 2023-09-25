@@ -566,7 +566,7 @@ void extractArticalLink(const std::string& url, std::vector<std::string>& urls) 
 
 
 int main() {
-	std::cout << "Ver. 1.2.4" << std::endl;
+	std::cout << "Ver. 1.2.5" << std::endl;
 	//Single版警告
 	//std::cout << "注意：本程序仅下载单篇投稿" << std::endl;
 	std::cout << "你要使用HTTP代理吗？不使用输入n，使用请留空直接回车即可：" << std::endl;
