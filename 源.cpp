@@ -541,9 +541,8 @@ void extractArticalLink(const std::string& url, std::vector<std::string>& urls) 
 
 	while (true) {
 		std::string content = getPageContent(fullUrl);
-
-		if (content.find("There are no posts for your query.") != std::string::npos) {
-			// 当返回内容中包含 "There are no posts for your query." 时，结束循环
+		if (content.find("Redirecting...") != std::string::npos) {
+			// 当返回内容中包含 "Redirecting..." 时，结束循环
 			break;
 		}
 		std::cout << "正在获取第" << count << "页" << std::endl;
