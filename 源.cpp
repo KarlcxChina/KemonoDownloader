@@ -21,78 +21,11 @@ std::string usepx = "1";
 std::string regex = "<article\n    class=\"post-card post-card--preview\"\n    data-id=\"(.*?)\"\n    data-service=\"(.*?)\"\n    data-user=\"(.*?)\"\n  >\n    <a href=\"(.*?)\">\n      <header class=\"post-card__header\">\n            (.*?)\n      </header>\n        <div class=\"post-card__image-container\">\n            <img\n              class=\"post-card__image\"\n              src=\"(.*?)\"\n            >\n          </div>\n      <footer class=\"post-card__footer\">\n              <time\n    class=\"timestamp \" \n    datetime=\"(.*?)\"\n  >\n      (.*?)\n  </time>\n\n        <div>\n            (.*?)\n        </div>\n      </footer>\n    </a>\n  </article>";
 std::string tpox;
 std::string dlmode;
+std::string myVersion = "1.3.0";
 
 
-//½«´«ÈëµÄUTF8×Ö·û´®×ª»»ÎªGBK·µ»Ø
-//WindowsAPI
-std::string convertUTF8ToGBK(const std::string& utf8String) {
-	int wideLength = MultiByteToWideChar(CP_UTF8, 0, utf8String.c_str(), -1, nullptr, 0);
-	if (wideLength == 0) {
-		std::cerr << "ÎŞ·¨»ñÈ¡¿í×Ö·û×Ö·û´®³¤¶È£¡" << std::endl;
-		return "";
-	}
-
-	wchar_t* wideBuffer = new wchar_t[wideLength];
-	MultiByteToWideChar(CP_UTF8, 0, utf8String.c_str(), -1, wideBuffer, wideLength);
-
-	int gbkLength = WideCharToMultiByte(CP_ACP, 0, wideBuffer, -1, nullptr, 0, nullptr, nullptr);
-	if (gbkLength == 0) {
-		std::cerr << "ÎŞ·¨»ñÈ¡GBK±àÂë×Ö·û´®³¤¶È£¡" << std::endl;
-		delete[] wideBuffer;
-		return "";
-	}
-
-	char* gbkBuffer = new char[gbkLength];
-	WideCharToMultiByte(CP_ACP, 0, wideBuffer, -1, gbkBuffer, gbkLength, nullptr, nullptr);
-
-	std::string gbkString(gbkBuffer);
-
-	delete[] wideBuffer;
-	delete[] gbkBuffer;
-
-	return gbkString;
-}
-
-//½«´«ÈëµÄGBK×Ö·û´®×ª»»UTF8Îª·µ»Ø
-//WindowsAPI
-std::string ConvertGBKToUTF8(const std::string& gbkText)
-{
-	int wideLength = ::MultiByteToWideChar(CP_ACP, 0, gbkText.c_str(), -1, NULL, 0);
-	if (wideLength == 0)
-	{
-		std::cerr << "Failed to convert string to wide characters." << std::endl;
-		return "";
-	}
-
-	std::wstring wideText;
-	wideText.resize(wideLength - 1);
-	if (::MultiByteToWideChar(CP_ACP, 0, gbkText.c_str(), -1, &wideText[0], wideLength) == 0)
-	{
-		std::cerr << "Failed to convert string to wide characters." << std::endl;
-		return "";
-	}
-
-	int utf8Length = ::WideCharToMultiByte(CP_UTF8, 0, wideText.c_str(), -1, NULL, 0, NULL, NULL);
-	if (utf8Length == 0)
-	{
-		std::cerr << "Failed to convert wide characters to UTF-8." << std::endl;
-		return "";
-	}
-
-	std::string utf8Text;
-	utf8Text.resize(utf8Length - 1);
-	if (::WideCharToMultiByte(CP_UTF8, 0, wideText.c_str(), -1, &utf8Text[0], utf8Length, NULL, NULL) == 0)
-	{
-		std::cerr << "Failed to convert wide characters to UTF-8." << std::endl;
-		return "";
-	}
-
-	return utf8Text;
-}
-
-
-// »Øµ÷º¯Êı£¬ÓÃÓÚĞ´ÈëÎÄ¼ş
-// ½á¹¹ÌåÓÃÓÚ±£´æ½ø¶ÈĞÅÏ¢
+// å›è°ƒå‡½æ•°ï¼Œç”¨äºå†™å…¥æ–‡ä»¶
+// ç»“æ„ä½“ç”¨äºä¿å­˜è¿›åº¦ä¿¡æ¯
 struct ProgressData {
 	double lastTime;
 	curl_off_t lastDownloaded;
@@ -131,20 +64,20 @@ int progress_func(void* ptr, double TotalToDownload, double NowDownloaded,
 
 
 bool myDownloadFile(const std::string& relativePath, const std::string& url, const std::string& fileName) {
-	std::string filePath = convertUTF8ToGBK(relativePath) + "\\" + convertUTF8ToGBK(fileName);
+	std::string filePath = relativePath + "\\" + fileName;
 
 	CURL* curl = curl_easy_init();
 	if (curl) {
-		// ´ò¿ªÎÄ¼ş
+		// æ‰“å¼€æ–‡ä»¶
 		std::ofstream file(filePath, std::ios::binary);
 		if (!file) {
-			std::cout << "ÎŞ·¨´ò¿ªÎÄ¼ş£º" << filePath << std::endl;
+			std::cout << "æ— æ³•æ‰“å¼€æ–‡ä»¶ï¼š" << filePath << std::endl;
 			return false;
 		}
 
 		std::string tpox = theip + ":" + theport;
 
-		// ÉèÖÃCurlÑ¡Ïî
+		// è®¾ç½®Curlé€‰é¡¹
 		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallbackf);
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.37");
@@ -156,51 +89,51 @@ bool myDownloadFile(const std::string& relativePath, const std::string& url, con
 		curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_HTTP);
 		curl_easy_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 1L);
 
-		// ÉèÖÃ½ø¶È»Øµ÷º¯Êı
+		// è®¾ç½®è¿›åº¦å›è°ƒå‡½æ•°
 		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, FALSE);
 		curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_func);
 		printf("]\r");
 
-		// Ö´ĞĞÇëÇó
+		// æ‰§è¡Œè¯·æ±‚
 		CURLcode res = curl_easy_perform(curl);
 
 		int count = 0;
-		// ¼ì²éÇëÇóÊÇ·ñ³É¹¦
+		// æ£€æŸ¥è¯·æ±‚æ˜¯å¦æˆåŠŸ
 		while (res != CURLE_OK) {
 			count++;
 			if (count == 5) {
 				return !true;
 			}
-			std::cout << "ÏÂÔØÊ§°Ü£º" << curl_easy_strerror(res) << std::endl;
-			std::cout << "ÖØÊÔ¡­£¨" << count << "/5£©" << std::endl;
+			std::cout << "ä¸‹è½½å¤±è´¥ï¼š" << curl_easy_strerror(res) << std::endl;
+			std::cout << "é‡è¯•â€¦ï¼ˆ" << count << "/5ï¼‰" << std::endl;
 			res = curl_easy_perform(curl);
 		}
 
-		// ÇåÀíCurl×ÊÔ´
+		// æ¸…ç†Curlèµ„æº
 		curl_easy_cleanup(curl);
 
-		// ¹Ø±ÕÎÄ¼ş
+		// å…³é—­æ–‡ä»¶
 		file.close();
 
-		std::cout << "ÎÄ¼şÏÂÔØ³É¹¦£º" << filePath << std::endl;
+		std::cout << "æ–‡ä»¶ä¸‹è½½æˆåŠŸï¼š" << filePath << std::endl;
 		return true;
 	}
 
 	return false;
 }
 
-// »Øµ÷º¯Êı£¬ÓÃÓÚ´¦ÀíHTTPÇëÇóµÄ·µ»ØÊı¾İ
+// å›è°ƒå‡½æ•°ï¼Œç”¨äºå¤„ç†HTTPè¯·æ±‚çš„è¿”å›æ•°æ®
 size_t WriteCallback(char* contents, size_t size, size_t nmemb, std::string* output) {
 	size_t totalSize = size * nmemb;
 	output->append(contents, totalSize);
 	return totalSize;
 }
 
-// »ñÈ¡Ö¸¶¨ÍøÖ·µÄÒ³ÃæÄÚÈİ
+// è·å–æŒ‡å®šç½‘å€çš„é¡µé¢å†…å®¹
 std::string getPageContent(const std::string& url) {
 	std::string response;
 
-	// ³õÊ¼»¯libcurl
+	// åˆå§‹åŒ–libcurl
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	CURL* curl = curl_easy_init();
 
@@ -228,7 +161,7 @@ std::string getPageContent(const std::string& url) {
 	return response;
 }
 
-// ÌáÈ¡ÍøÒ³ÄÚÈİÖĞµÄartist_name
+// æå–ç½‘é¡µå†…å®¹ä¸­çš„artist_name
 std::string extractArtistName(const std::string& webpage) {
 	std::string artistName;
 	std::string searchString = "<meta name=\"artist_name\" content=\"";
@@ -243,7 +176,7 @@ std::string extractArtistName(const std::string& webpage) {
 	return artistName;
 }
 
-// ÌáÈ¡artist_name
+// æå–artist_name
 std::string getArtistName(const std::string& url) {
 	std::string artistName;
 
@@ -278,7 +211,7 @@ std::string getArtistName(const std::string& url) {
 	return artistName;
 }
 
-//ÓÃÓÚ½«HTML×ªÒå×Ö·û×ª»»»ØÔ­Ñù
+//ç”¨äºå°†HTMLè½¬ä¹‰å­—ç¬¦è½¬æ¢å›åŸæ ·
 std::string unescapeHTML(const std::string& input) {
 	std::string result;
 	size_t pos = 0;
@@ -320,7 +253,7 @@ std::string unescapeHTML(const std::string& input) {
 				else if (escape == "39") {
 					result += '\'';
 				}
-				// Ìí¼Ó¸ü¶à×ªÒå×Ö·ûµÄ´¦ÀíÂß¼­
+				// æ·»åŠ æ›´å¤šè½¬ä¹‰å­—ç¬¦çš„å¤„ç†é€»è¾‘
 
 				pos = endPos + 1;
 				continue;
@@ -334,39 +267,39 @@ std::string unescapeHTML(const std::string& input) {
 	return result;
 }
 
-//½«´«ÈëµÄ×Ö·û´®µÄ»»ĞĞ±ä³É\n
-//²âÊÔÓÃ
+//å°†ä¼ å…¥çš„å­—ç¬¦ä¸²çš„æ¢è¡Œå˜æˆ\n
+//æµ‹è¯•ç”¨
 void replaceNewlines(std::string& str) {
 	size_t found = str.find('\n');
 	while (found != std::string::npos) {
 		str.replace(found, 1, "\\n");
-		found = str.find('\n', found + 2); // ÕÒµ½ÏÂÒ»¸ö»»ĞĞ·û
+		found = str.find('\n', found + 2); // æ‰¾åˆ°ä¸‹ä¸€ä¸ªæ¢è¡Œç¬¦
 	}
 }
 
-//½«´«ÈëµÄ×Ö·û´®Ğ´Èëµ½ÔËĞĞÄ¿Â¼ÏÂµÄout.txt
-//²âÊÔÓÃ
+//å°†ä¼ å…¥çš„å­—ç¬¦ä¸²å†™å…¥åˆ°è¿è¡Œç›®å½•ä¸‹çš„out.txt
+//æµ‹è¯•ç”¨
 void writeToFile(const std::string& content) {
 	std::ofstream outputFile("out.txt");
 
 	if (outputFile.is_open()) {
 		outputFile << content;
 		outputFile.close();
-		std::cout << "Ğ´ÈëÎÄ¼ş³É¹¦£¡" << std::endl;
+		std::cout << "å†™å…¥æ–‡ä»¶æˆåŠŸï¼" << std::endl;
 	}
 	else {
-		std::cerr << "ÎŞ·¨´ò¿ªÎÄ¼ş£¡" << std::endl;
+		std::cerr << "æ— æ³•æ‰“å¼€æ–‡ä»¶ï¼" << std::endl;
 	}
 }
 
-//vectorÈ¥ÖØ
+//vectorå»é‡
 void removeDuplicates(std::vector<std::string>& urls) {
 	std::unordered_set<std::string> uniqueUrls;
 	std::vector<std::string> result;
 
 	for (const std::string& url : urls) {
 		if (uniqueUrls.find(url) == uniqueUrls.end()) {
-			// µ±Ç°ÔªËØÔÚ¼¯ºÏÖĞ²»´æÔÚ£¬Ìí¼Óµ½½á¹ûÏòÁ¿ºÍÎ¨Ò»ÔªËØ¼¯ºÏ
+			// å½“å‰å…ƒç´ åœ¨é›†åˆä¸­ä¸å­˜åœ¨ï¼Œæ·»åŠ åˆ°ç»“æœå‘é‡å’Œå”¯ä¸€å…ƒç´ é›†åˆ
 			result.push_back(url);
 			uniqueUrls.insert(url);
 		}
@@ -375,7 +308,7 @@ void removeDuplicates(std::vector<std::string>& urls) {
 	urls = result;
 }
 
-//Ìæ»»·Ç·¨Windows×Ö·û
+//æ›¿æ¢éæ³•Windowså­—ç¬¦
 std::string ReplaceInvalidChars(std::string str) {
 	std::string invalidChars = "\\/*?\"<>|:";
 	for (auto& c : str) {
@@ -387,37 +320,37 @@ std::string ReplaceInvalidChars(std::string str) {
 	return str;
 }
 
-//´´½¨²¢Ğ´ÈëÎÄ¼ş
+//åˆ›å»ºå¹¶å†™å…¥æ–‡ä»¶
 bool myCreateFile(const std::string& relativePath, const std::string& fileName, const std::string& content)
 {
-	// ´´½¨ÍêÕûµÄÎÄ¼şÂ·¾¶
-	std::filesystem::path filePath(convertUTF8ToGBK(relativePath));
+	// åˆ›å»ºå®Œæ•´çš„æ–‡ä»¶è·¯å¾„
+	std::filesystem::path filePath(relativePath);
 
 	filePath /= fileName;
 
-	// ´ò¿ªÎÄ¼şÁ÷½øĞĞĞ´Èë
+	// æ‰“å¼€æ–‡ä»¶æµè¿›è¡Œå†™å…¥
 	std::ofstream file(filePath);
 	if (file.is_open())
 	{
 		file << content;
 		file.close();
-		std::cout << "ÎÄ¼ş´´½¨³É¹¦£º" << fileName << std::endl;
+		std::cout << "æ–‡ä»¶åˆ›å»ºæˆåŠŸï¼š" << fileName << std::endl;
 		return true;
 	}
 	else
 	{
-		std::cout << "ÎÄ¼ş´´½¨Ê§°Ü£º" << fileName << std::endl;
+		std::cout << "æ–‡ä»¶åˆ›å»ºå¤±è´¥ï¼š" << fileName << std::endl;
 		return false;
 	}
 }
 
-//´´½¨ÎÄ¼ş¼Ğ
+//åˆ›å»ºæ–‡ä»¶å¤¹
 //WindowsAPI
 bool CreateDirectoryRecursive(const std::wstring& path)
 {
 	if (::CreateDirectoryW(path.c_str(), NULL) || ::GetLastError() == ERROR_ALREADY_EXISTS)
 	{
-		std::wcout << L"ÎÄ¼ş¼Ğ´´½¨³É¹¦" << std::endl;
+		std::wcout << L"æ–‡ä»¶å¤¹åˆ›å»ºæˆåŠŸ" << std::endl;
 		return true;
 	}
 	else
@@ -425,14 +358,14 @@ bool CreateDirectoryRecursive(const std::wstring& path)
 		DWORD lastError = ::GetLastError();
 		if (lastError == ERROR_PATH_NOT_FOUND)
 		{
-			// µİ¹é´´½¨ÉÏ¼¶Ä¿Â¼
+			// é€’å½’åˆ›å»ºä¸Šçº§ç›®å½•
 			size_t pos = path.find_last_of(L"\\/");
 			if (pos != std::wstring::npos)
 			{
 				std::wstring parentPath = path.substr(0, pos);
 				if (CreateDirectoryRecursive(parentPath))
 				{
-					// ´´½¨ÉÏ¼¶Ä¿Â¼³É¹¦ºóÔÙ´Î³¢ÊÔ´´½¨µ±Ç°Ä¿Â¼
+					// åˆ›å»ºä¸Šçº§ç›®å½•æˆåŠŸåå†æ¬¡å°è¯•åˆ›å»ºå½“å‰ç›®å½•
 					return CreateDirectoryRecursive(path);
 				}
 				else
@@ -442,7 +375,7 @@ bool CreateDirectoryRecursive(const std::wstring& path)
 			}
 		}
 
-		std::wcerr << L"ÎÄ¼ş¼Ğ´´½¨Ê§°Ü: " << path << std::endl;
+		std::wcerr << L"æ–‡ä»¶å¤¹åˆ›å»ºå¤±è´¥: " << path << std::endl;
 		return false;
 	}
 }
@@ -459,23 +392,23 @@ bool myCreateDirectory(const std::string& relativePath)
 	return CreateDirectoryRecursive(widePath);
 }
 
-//ÌáÈ¡ºó×ºÃû
+//æå–åç¼€å
 std::string GetFileExtension(const std::string& downloadLink)
 {
 	std::string fileExtension;
 
-	// ÕÒµ½×îºóÒ»¸öĞ±¸ÜµÄÎ»ÖÃ
+	// æ‰¾åˆ°æœ€åä¸€ä¸ªæ–œæ çš„ä½ç½®
 	size_t lastSlashPos = downloadLink.find_last_of("/");
 	if (lastSlashPos != std::string::npos)
 	{
-		// ÌáÈ¡ÎÄ¼şÃû
+		// æå–æ–‡ä»¶å
 		std::string fileName = downloadLink.substr(lastSlashPos + 1);
 
-		// ÕÒµ½×îºóÒ»¸öµãµÄÎ»ÖÃ
+		// æ‰¾åˆ°æœ€åä¸€ä¸ªç‚¹çš„ä½ç½®
 		size_t lastDotPos = fileName.find_last_of(".");
 		if (lastDotPos != std::string::npos && lastDotPos != fileName.length() - 1)
 		{
-			// ÌáÈ¡ºó×ºÃû
+			// æå–åç¼€å
 			fileExtension = fileName.substr(lastDotPos + 1);
 		}
 	}
@@ -483,7 +416,7 @@ std::string GetFileExtension(const std::string& downloadLink)
 	return fileExtension;
 }
 
-//´ÓÎ²²¿É¾×Ö·û
+//ä»å°¾éƒ¨åˆ å­—ç¬¦
 std::string RemoveLastCharacters(const std::string& str, size_t n)
 {
 	if (n >= str.length()) {
@@ -493,37 +426,35 @@ std::string RemoveLastCharacters(const std::string& str, size_t n)
 	return str.substr(0, str.length() - n);
 }
 
-// ÌáÈ¡±êÌâÄÚÈİºÍURL
+// æå–æ ‡é¢˜å†…å®¹å’ŒURL
 void extractTitleAndURL(const std::string& url, std::string& title, std::string& pubDate, std::string& content, std::vector<std::string>& urls) {
 	std::string response;
 	response = getPageContent(url);
-	//response = convertUTF8ToGBK(response);
 	response = unescapeHTML(response);
-	//replaceNewlines(response);
 	//writeToFile(response);
 
-	// ÌáÈ¡±êÌâÄÚÈİ
+	// æå–æ ‡é¢˜å†…å®¹
 	std::regex titleRegex("<h1 class=\"post__title\">\n            <span>(.*?)</span> <span>((.*?))</span>\n        </h1>");
 	std::smatch titleMatch;
 	if (std::regex_search(response, titleMatch, titleRegex) && titleMatch.size() > 1) {
 		title = titleMatch[1].str();
 	}
 
-	// ÌáÈ¡·¢²¼Ê±¼ä
+	// æå–å‘å¸ƒæ—¶é—´
 	std::regex pubDateRegex("<meta name=\"published\" content=\"(.*?)\">");
 	std::smatch pubDateMatch;
 	if (std::regex_search(response, pubDateMatch, pubDateRegex) && pubDateMatch.size() > 1) {
 		pubDate = pubDateMatch[1].str();
 	}
 
-	// ÌáÈ¡ËµÃ÷ÄÚÈİ
+	// æå–è¯´æ˜å†…å®¹
 	std::regex contentRegex("<h2>Content</h2>\n    <div class=\"post__content\">\n<pre>([\\s\\S]*?)</pre>\n    </div>");
 	std::smatch contentMatch;
 	if (std::regex_search(response, contentMatch, contentRegex) && contentMatch.size() > 1) {
 		content = contentMatch[1].str();
 	}
 
-	// ÌáÈ¡¸ñÊ½Îª<a class="fileThumb" href="#url" download="#filename">µÄURL²¿·Ö
+	// æå–æ ¼å¼ä¸º<a class="fileThumb" href="#url" download="#filename">çš„URLéƒ¨åˆ†
 	std::regex urlRegex("<a\n              class=\"fileThumb\"\n              href=\"(.*?)\"\n              download=\".*?\"\n            >");
 	std::sregex_iterator urlIterator(response.begin(), response.end(), urlRegex);
 	std::sregex_iterator endIterator;
@@ -532,33 +463,33 @@ void extractTitleAndURL(const std::string& url, std::string& title, std::string&
 	}
 
 }
-// ´ÓÄ¿Â¼ÌáÈ¡Í¶¸å
+// ä»ç›®å½•æå–æŠ•ç¨¿
 void extractArticalLink(const std::string& url, std::vector<std::string>& urls) {
 	int offset = 0;
 	int count = 1;
-	std::cout << "¿ªÊ¼»ñÈ¡Ä¿Â¼¡­" << std::endl;
+	std::cout << "å¼€å§‹è·å–ç›®å½•â€¦" << std::endl;
 	std::string fullUrl = url + "?o=" + std::to_string(offset);
 
 	while (true) {
 		std::string content = getPageContent(fullUrl);
 		if (content.find("Redirecting...") != std::string::npos) {
-			// µ±·µ»ØÄÚÈİÖĞ°üº¬ "Redirecting..." Ê±£¬½áÊøÑ­»·
+			// å½“è¿”å›å†…å®¹ä¸­åŒ…å« "Redirecting..." æ—¶ï¼Œç»“æŸå¾ªç¯
 			break;
 		}
-		std::cout << "ÕıÔÚ»ñÈ¡µÚ" << count << "Ò³" << std::endl;
+		std::cout << "æ­£åœ¨è·å–ç¬¬" << count << "é¡µ" << std::endl;
 		count++;
-		// Ê¹ÓÃÕıÔò±í´ïÊ½ÌáÈ¡Á´½Ó²¿·Ö
+		// ä½¿ç”¨æ­£åˆ™è¡¨è¾¾å¼æå–é“¾æ¥éƒ¨åˆ†
 		std::regex linkRegex(regex);
 		std::smatch match;
 
-		// ÔÚ·µ»ØÄÚÈİÖĞ²éÕÒÆ¥ÅäµÄÁ´½Ó²¢Ìí¼Óµ½ urls ÖĞ
+		// åœ¨è¿”å›å†…å®¹ä¸­æŸ¥æ‰¾åŒ¹é…çš„é“¾æ¥å¹¶æ·»åŠ åˆ° urls ä¸­
 		std::string::const_iterator searchStart(content.cbegin());
 		while (std::regex_search(searchStart, content.cend(), match, linkRegex)) {
 			urls.push_back(match[4]);
 			searchStart = match.suffix().first;
 		}
 
-		// Ôö¼Ó offset Öµ£¬¹¹ÔìÏÂÒ»¸öÇëÇóµÄ URL
+		// å¢åŠ  offset å€¼ï¼Œæ„é€ ä¸‹ä¸€ä¸ªè¯·æ±‚çš„ URL
 		offset += 50;
 		fullUrl = url + "?o=" + std::to_string(offset);
 	}
@@ -566,26 +497,35 @@ void extractArticalLink(const std::string& url, std::vector<std::string>& urls) 
 
 
 int main() {
-	std::cout << "Ver. 1.2.5" << std::endl;
-	//Single°æ¾¯¸æ
-	//std::cout << "×¢Òâ£º±¾³ÌĞò½öÏÂÔØµ¥ÆªÍ¶¸å" << std::endl;
-	std::cout << "ÄãÒªÊ¹ÓÃHTTP´úÀíÂğ£¿²»Ê¹ÓÃÊäÈën£¬Ê¹ÓÃÇëÁô¿ÕÖ±½Ó»Ø³µ¼´¿É£º" << std::endl;
+	SetConsoleOutputCP(65001);
+	std::cout << "Ver. 1.3.0\nå¦‚æœæœ‰ä»»ä½•ä½¿ç”¨ä¸Šçš„é—®é¢˜ï¼Œè¯·åœ¨Githubä¸Šæå‡ºissueä¸æˆ‘è”ç³»ï¼Œå¦‚æœä½ å–œæ¬¢è¿™ä¸ªè½¯ä»¶ï¼Œè¯·ä½ åœ¨GitHubä¸Šä¸ºæˆ‘ç‚¹ä¸ªStarå¹¶åˆ†äº«ç»™å…¶ä»–äºº\nGitHubåœ°å€ï¼šhttps://github.com/KarlcxChina/KemonoDownloader\n" << std::endl;
+	
+	//Singleç‰ˆè­¦å‘Š
+	//std::cout << "æ³¨æ„ï¼šæœ¬ç¨‹åºä»…ä¸‹è½½å•ç¯‡æŠ•ç¨¿" << std::endl;
+	std::cout << "ä½ è¦ä½¿ç”¨HTTPä»£ç†å—ï¼Ÿä¸ä½¿ç”¨è¾“å…¥nï¼Œä½¿ç”¨è¯·ç•™ç©ºç›´æ¥å›è½¦å³å¯ï¼š" << std::endl;
 	std::getline(std::cin, usepx);
 	if (usepx != "n") {
 		usepx = "1";
-		std::cout << "ÄúÑ¡ÔñÊ¹ÓÃHTTP´úÀí" << std::endl;
-		std::cout << "ÇëÊäÈëHTTP´úÀíip(Áô¿ÕÎªÄ¬ÈÏlocalhost£¬ÍÆ¼ö)£º" << std::endl;
+		std::cout << "æ‚¨é€‰æ‹©ä½¿ç”¨HTTPä»£ç†" << std::endl;
+		std::cout << "è¯·è¾“å…¥HTTPä»£ç†ip(ç•™ç©ºä¸ºé»˜è®¤localhostï¼Œæ¨è)ï¼š" << std::endl;
 		std::string tip = "";
 		std::getline(std::cin, tip);
-		std::cout << "ÇëÊäÈëHTTP´úÀí¶Ë¿Ú(Áô¿ÕÎªÄ¬ÈÏ10809£¬10809ÎªV2rayNÄ¬ÈÏ¶Ë¿Ú£¬Çë¸ù¾İÄúµÄ´úÀíÈí¼şÑ¡Ôñ)£º" << std::endl;
+		std::cout << "è¯·è¾“å…¥HTTPä»£ç†ç«¯å£(ç•™ç©ºä¸ºé»˜è®¤10809ï¼Œ10809ä¸ºV2rayNé»˜è®¤ç«¯å£ï¼Œè¯·æ ¹æ®æ‚¨çš„ä»£ç†è½¯ä»¶é€‰æ‹©)ï¼š" << std::endl;
 		std::string tport = "";
 		std::getline(std::cin, tport);
 		if (tip != "") { theip = tip; }
 		if (tport != "") { theport = tport; }
 		tpox = theip + ":" + theport;
-		std::cout << "ÄúµÄHTTP´úÀíµØÖ·ÊÇ£º" << tpox << std::endl;
+		std::cout << "æ‚¨çš„HTTPä»£ç†åœ°å€æ˜¯ï¼š" << tpox << std::endl;
 	}
-	std::cout << "ÊÇ·ñÊ¹ÓÃ½öÍ¼Æ¬ÏÂÔØÄ£Ê½£¿¸ÃÄ£Ê½ÏÂ½«Ö»»áÏÂÔØÍ¼Æ¬£¬ÇÒËùÓĞÍ¼Æ¬¾ù´æ´¢ÔÚÍ¬Ò»Ä¿Â¼ÏÂ¡£Ê¹ÓÃÇëÊäÈëy£¬²»Ê¹ÓÃÇëÁô¿Õ£º" << std::endl;
+	std::cout << "æ£€æŸ¥ç¨‹åºç‰ˆæœ¬â€¦" << std::endl;
+	
+	std::string newestVersion = getPageContent("https://raw.githubusercontent.com/KarlcxChina/KemonoDownloader/main/Version.ver");
+	if (myVersion != newestVersion)
+	{
+		std::cout << "\næ‚¨æ­£åœ¨ä½¿ç”¨è¿‡æ—¶çš„ç¨‹åºç‰ˆæœ¬ï¼è¯·åˆ°Githubç½‘ç«™æ›´æ–°ç¨‹åºçš„æœ€æ–°ç‰ˆæœ¬ï¼\nåœ°å€ï¼šhttps://github.com/KarlcxChina/KemonoDownloader\n" << std::endl;
+	}
+	std::cout << "æ˜¯å¦ä½¿ç”¨ä»…å›¾ç‰‡ä¸‹è½½æ¨¡å¼ï¼Ÿè¯¥æ¨¡å¼ä¸‹å°†åªä¼šä¸‹è½½å›¾ç‰‡ï¼Œä¸”æ‰€æœ‰å›¾ç‰‡å‡å­˜å‚¨åœ¨åŒä¸€ç›®å½•ä¸‹ã€‚ä½¿ç”¨è¯·è¾“å…¥yï¼Œä¸ä½¿ç”¨è¯·ç•™ç©ºï¼š" << std::endl;
 	std::getline(std::cin, dlmode);
 	if (dlmode == "y") {
 		dlmode = "1";
@@ -603,14 +543,14 @@ int main() {
 	}
 	const std::string domain = "https://kemono.su";
 	std::string targetUrl = "";
-	std::cout << "ÇëÊäÈëÄ¿±êÍøÖ·£¨Çë²»ÒªÊäÈë¡°?o=¡±¼°Ö®ºóµÄ²¿·Ö£¬·ñÔò³ÌĞò½«ÎŞ·¨Õı³£Ê¶±ğ£©£º" << std::endl;
+	std::cout << "è¯·è¾“å…¥ç›®æ ‡ç½‘å€ï¼ˆè¯·ä¸è¦è¾“å…¥â€œ?o=â€åŠä¹‹åçš„éƒ¨åˆ†ï¼Œå¦åˆ™ç¨‹åºå°†æ— æ³•æ­£å¸¸è¯†åˆ« Singleç‰ˆè¯·å¿½ç•¥è¯¥æç¤ºï¼‰ï¼š" << std::endl;
 	std::getline(std::cin, targetUrl);
 
 	/*
-	 µ¥¸öÏÂÔØSTR
+	 å•ä¸ªä¸‹è½½STR
 	
 	std::string theName = "";
-	std::cout << "ÇëÊäÈë×÷ÕßÃû³Æ£º" << std::endl;
+	std::cout << "è¯·è¾“å…¥ä½œè€…åç§°ï¼š" << std::endl;
 	std::getline(std::cin, theName);
 	std::string title;
 	std::string pubDate;
@@ -632,7 +572,7 @@ int main() {
 	}
 	int tcount = 1;
 	for (const auto& turl : urls) {
-		std::cout << "ÕıÔÚÏÂÔØµÚ" << tcount << "ÕÅÍ¼Æ¬" << std::endl;
+		std::cout << "æ­£åœ¨ä¸‹è½½ç¬¬" << tcount << "å¼ å›¾ç‰‡" << std::endl;
 		if (dlmode == "0") {
 			myDownloadFile(thePath, turl, std::to_string(tcount) + "." + GetFileExtension(turl));
 		}
@@ -643,23 +583,23 @@ int main() {
 		tcount++;
 	}
 	/*
-	 µ¥¸öÏÂÔØEND
+	 å•ä¸ªä¸‹è½½END
 	*/ 
 
 
 	/*
-	ÏÂÔØËùÓĞSTR
+	ä¸‹è½½æ‰€æœ‰STR
 	*/
-	std::cout << "ÕıÔÚ»ñÈ¡Ãû³Æ¡­" << std::endl;
+	std::cout << "æ­£åœ¨è·å–åç§°â€¦" << std::endl;
 	std::string theName = getArtistName(targetUrl);
 
 	std::vector<std::string> aurls;
 	int count = 1;
 	extractArticalLink(targetUrl, aurls);
 	myCreateDirectory(theName);
-	std::cout << "»ñÈ¡ÁĞ±íÍê±Ï£¬¿ªÊ¼×¥È¡¸å¼ş£º" << std::endl;
+	std::cout << "è·å–åˆ—è¡¨å®Œæ¯•ï¼Œå¼€å§‹æŠ“å–ç¨¿ä»¶ï¼š" << std::endl;
 	for (const auto& url : aurls) {
-		std::cout << "ÕıÔÚ»ñÈ¡µÚ"  << count <<"Æª¸å¼ş" << std::endl;
+		std::cout << "æ­£åœ¨è·å–ç¬¬"  << count <<"ç¯‡ç¨¿ä»¶" << std::endl;
 		count++;
 		targetUrl = domain + url;
 		std::string title;
@@ -682,7 +622,7 @@ int main() {
 		}
 		int tcount = 1;
 		for (const auto& turl : urls) {
-			std::cout << "ÕıÔÚÏÂÔØµÚ" << tcount << "ÕÅÍ¼Æ¬" << std::endl;
+			std::cout << "æ­£åœ¨ä¸‹è½½ç¬¬" << tcount << "å¼ å›¾ç‰‡" << std::endl;
 			if (dlmode == "0"){
 				myDownloadFile(thePath, turl, std::to_string(tcount) + "." + GetFileExtension(turl));}
 			else
@@ -694,10 +634,10 @@ int main() {
 
 	}
 	/*
-	ÏÂÔØËùÓĞEND
+	ä¸‹è½½æ‰€æœ‰END
 	*/
 
-	std::cout << "ÏÂÔØÍê³É£¬Press Enter to Exit";
+	std::cout << "ä¸‹è½½å®Œæˆï¼ŒPress Enter to Exit";
 	std::getline(std::cin, theName);
 
 
