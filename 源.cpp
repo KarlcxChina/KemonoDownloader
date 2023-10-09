@@ -21,7 +21,7 @@ std::string usepx = "1";
 std::string regex = "<article\n    class=\"post-card post-card--preview\"\n    data-id=\"(.*?)\"\n    data-service=\"(.*?)\"\n    data-user=\"(.*?)\"\n  >\n    <a href=\"(.*?)\">\n      <header class=\"post-card__header\">\n            (.*?)\n      </header>\n        <div class=\"post-card__image-container\">\n            <img\n              class=\"post-card__image\"\n              src=\"(.*?)\"\n            >\n          </div>\n      <footer class=\"post-card__footer\">\n              <time\n    class=\"timestamp \" \n    datetime=\"(.*?)\"\n  >\n      (.*?)\n  </time>\n\n        <div>\n            (.*?)\n        </div>\n      </footer>\n    </a>\n  </article>";
 std::string tpox;
 std::string dlmode;
-std::string myVersion = "1.3.0";
+std::string myVersion = "1.3.1";
 
 
 // 回调函数，用于写入文件
@@ -317,6 +317,14 @@ std::string ReplaceInvalidChars(std::string str) {
 			c = '_';
 		}
 	}
+	// 找到最后一个非空格字符的位置
+	size_t endPos = str.find_last_not_of(' ');
+
+	// 如果找到了非空格字符，则删除末尾的空格
+	if (endPos != std::string::npos) {
+		str = str.substr(0, endPos + 1);
+	}
+
 	return str;
 }
 
@@ -350,7 +358,7 @@ bool CreateDirectoryRecursive(const std::wstring& path)
 {
 	if (::CreateDirectoryW(path.c_str(), NULL) || ::GetLastError() == ERROR_ALREADY_EXISTS)
 	{
-		std::wcout << L"文件夹创建成功" << std::endl;
+		std::cout << "文件夹创建成功" << std::endl;
 		return true;
 	}
 	else
@@ -498,10 +506,10 @@ void extractArticalLink(const std::string& url, std::vector<std::string>& urls) 
 
 int main() {
 	SetConsoleOutputCP(65001);
-	std::cout << "Ver. 1.3.0\n如果有任何使用上的问题，请在Github上提出issue与我联系，如果你喜欢这个软件，请你在GitHub上为我点个Star并分享给其他人\nGitHub地址：https://github.com/KarlcxChina/KemonoDownloader\n" << std::endl;
+	std::cout << "Ver. 1.3.1\n如果有任何使用上的问题，请在Github上提出issue与我联系，如果你喜欢这个软件，请你在GitHub上为我点个Star并分享给其他人\nGitHub地址：https://github.com/KarlcxChina/KemonoDownloader\n" << std::endl;
 	
 	//Single版警告
-	//std::cout << "注意：本程序仅下载单篇投稿" << std::endl;
+	std::cout << "注意：本程序仅下载单篇投稿" << std::endl;
 	std::cout << "你要使用HTTP代理吗？不使用输入n，使用请留空直接回车即可：" << std::endl;
 	std::getline(std::cin, usepx);
 	if (usepx != "n") {
@@ -548,7 +556,7 @@ int main() {
 
 	/*
 	 单个下载STR
-	
+	*/
 	std::string theName = "";
 	std::cout << "请输入作者名称：" << std::endl;
 	std::getline(std::cin, theName);
@@ -589,7 +597,7 @@ int main() {
 
 	/*
 	下载所有STR
-	*/
+	
 	std::cout << "正在获取名称…" << std::endl;
 	std::string theName = getArtistName(targetUrl);
 
