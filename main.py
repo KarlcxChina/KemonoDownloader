@@ -27,7 +27,7 @@ _console_formatter = logging.Formatter(
 )
 _console_handler.setFormatter(_console_formatter)
 
-if not logger.handlers:f
+if not logger.handlers:
     logger.addHandler(_console_handler)
 
 
