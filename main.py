@@ -27,7 +27,7 @@ _console_formatter = logging.Formatter(
 )
 _console_handler.setFormatter(_console_formatter)
 
-if not logger.handlers:
+if not logger.handlers:f
     logger.addHandler(_console_handler)
 
 
@@ -50,7 +50,7 @@ class Config:
         ]
     )
     headers: Dict[str, str] = field(default_factory=lambda: {"accept": "text/css"})
-    aria2_rpc_url: str = "http://localhost:6800/jsonrpc"
+    aria2_rpc_url: str = "http://localhost:6888/jsonrpc"
 
 
 SMALL_RETRY_TIMES = 2
@@ -68,7 +68,7 @@ MAX_TOTAL_RETRY = BIG_RETRY_TIMES * (SMALL_RETRY_TIMES + 1)
 def aria2_rpc_call(
         method: str,
         params: list,
-        aria2_rpc_url: str = "http://localhost:6800/jsonrpc",
+        aria2_rpc_url: str = "http://localhost:6888/jsonrpc",
         aria2_token: str | None = None,
 ):
     """通用 aria2 RPC 调用封装。"""
@@ -110,7 +110,7 @@ def downloadRes(
         server: str,
         attachmentName: str,
         targetFolder: str,
-        aria2_rpc_url: str = "http://localhost:6800/jsonrpc",
+        aria2_rpc_url: str = "http://localhost:6888/jsonrpc",
         aria2_token: str = None,
 ) -> str:
     """
@@ -885,7 +885,7 @@ def parse_args():
         type=str,
         default=None,
         help=(
-            "Aria2 JSON-RPC 地址，例如: http://localhost:6800/jsonrpc 。"
+            "Aria2 JSON-RPC 地址，例如: http://localhost:6888/jsonrpc 。"
             "如果未指定，将在脚本开始时运行本地 aria2c.exe (--conf-path=aria2.conf)。"
         ),
     )
@@ -991,7 +991,7 @@ def main():
     if args.aria2_rpc_url:
         cfg.aria2_rpc_url = args.aria2_rpc_url
     else:
-        cfg.aria2_rpc_url = "http://localhost:6800/jsonrpc"
+        cfg.aria2_rpc_url = "http://localhost:6888/jsonrpc"
         start_aria2_process(currentProxyUrlStr)
 
     init_file_logger(cfg.folder)
