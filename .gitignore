@@ -2,3 +2,6 @@ old/x64/*
 old/.vs/*
 .idea/*
 aria2c.exe
+dist/*
+build/*
+*.spec
