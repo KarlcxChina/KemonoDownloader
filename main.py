@@ -827,7 +827,7 @@ def sanitizeFilenameAdvanced(
 # CLI & 主入口
 # ---------------------------
 def parse_args():
-    default_baseUrl = "https://kemono.cr/api/v1/"
+    default_baseUrl = "https://kemono.cr/"
     default_max_retries = 5
     default_base_backoff_factor = 3.0
     default_folder = os.getcwd()
@@ -1016,6 +1016,8 @@ def main():
     logger.info("-------------------\n")
 
     logger.info("\n---- 抓取开始咯 ----")
+
+    cfg.baseUrl = cfg.baseUrl + "api/v1/"
 
     getPostFromPage(userid, service, postBegins, cfg)
 
