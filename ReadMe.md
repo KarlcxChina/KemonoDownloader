@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 
 
-### 下载服务器配置（必须步骤）
+### 下载服务器配置
 
 如果你拥有自己的 Aria2 下载服务器，或者本地已经运行了Aria2服务器，可以通过下面的命令行参数配置 Aria2 下载服务
 
@@ -66,8 +66,14 @@ pip install -r requirements.txt
 
 ### 基本用法
 
+本程序暂时仅支持命令行调用，不支持直接运行
+
 ```bash
 python main.py <用户ID> <服务名称>
+```
+或
+```cmd
+KemonoDownloader.exe <用户ID> <服务名称>
 ```
 
 **示例：**
@@ -81,6 +87,10 @@ https://kemono.cr/fanbox/user/12345678
 那么使用命令为：
 ```bash
 python main.py 12345678 fanbox
+```
+或
+```cmd
+KemonoDownloader.exe 12345678 fanbox
 ```
 
 
