@@ -187,7 +187,8 @@ def submit_all_attachments(
     """
     tasks: List[DownloadTask] = []
     for attachment in attachments:
-        attachmentName = attachment.get("name")
+        raw_name = str(attachment.get("name"))
+        attachmentName = sanitizeFilenameAdvanced(raw_name, config.targetOS)
         path = attachment.get("path")
         server = attachment.get("server")
 
@@ -233,7 +234,7 @@ def poll_and_retry_tasks(
         logger.info("没有附件需要下载。")
         return True
 
-    logger.info(f"开始轮询下载任务，任务数量: {len(active_tasks)}")
+    logger.info(f"开始等待下载任务完成，任务数量: {len(active_tasks)}")
 
     while active_tasks:
         for task in list(active_tasks):
@@ -350,7 +351,8 @@ def process_attachments_batch(
 # 帖子抓取核心逻辑
 # ---------------------------
 def process_attachment(attachment, postFolder: str, config: Config):
-    attachmentName = attachment.get("name")
+    raw_name = str(attachment.get("name"))
+    attachmentName = sanitizeFilenameAdvanced(raw_name, config.targetOS)
     att_type = attachment.get("type")
 
     if att_type == "thumbnail":
@@ -750,7 +752,7 @@ def sanitizeFilenameAdvanced(
         visual_similar_replacements = {
             "<": "＜",
             ">": "＞",
-            ":": "∶",
+            ":": "：",
             '"': "＂",
             "|": "｜",
             "?": "？",
@@ -770,16 +772,9 @@ def sanitizeFilenameAdvanced(
 
     base = Path(filename).name
     base = unicodedata.normalize("NFKC", base)
-    name_part, ext_part = os.path.splitext(base)
-
-    name_part = re.sub(r"[\x00-\x1f\x7f]", default_replacement_char, name_part)
-    name_part = "".join(
-        ch if unicodedata.category(ch) != "Cf" else default_replacement_char
-        for ch in name_part
-    )
 
     processed_chars = []
-    for ch in name_part:
+    for ch in base:
         illegal = False
         if target == "windows":
             if ch in '<>:"/\\|?*':
@@ -796,8 +791,10 @@ def sanitizeFilenameAdvanced(
         else:
             processed_chars.append(ch)
 
-    clean_name = "".join(processed_chars)
-    clean_name = clean_name.lstrip(" ")
+    clean_base = "".join(processed_chars)
+    name_part, ext_part = os.path.splitext(clean_base)
+
+    clean_name = name_part.lstrip(" ")
     if target == "windows":
         clean_name = clean_name.rstrip(" .")
     else:
@@ -809,6 +806,7 @@ def sanitizeFilenameAdvanced(
 
     ext = ext_part or ""
     max_name_len = max_filename_length - len(ext)
+
     if max_name_len <= 0:
         clean_name = default_replacement_char
         ext = ext[: max(0, max_filename_length - 1)]
@@ -847,7 +845,7 @@ def parse_args():
         "--proxy_url",
         type=str,
         default=None,
-        help="代理URL (例如: http://localhost:7897)。如果提供，将启用代理。",
+        help="代理URL (例如: http://localhost:7890)。如果提供，将启用代理。",
     )
     parser.add_argument(
         "--max_retries",
@@ -958,6 +956,7 @@ def start_aria2_process(proxy_url: Optional[str]):
         quit()
 
     logger.info("现在可以直接用浏览器打开程序目录下的 AriaNg.html 文件查看下载进度。")
+    time.sleep(5)
 
 
 def main():
