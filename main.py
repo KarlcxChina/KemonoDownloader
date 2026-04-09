@@ -3,7 +3,6 @@ import json
 import os
 import platform
 import time
-from pathlib import Path
 from typing import Dict, Iterable, Optional, List
 from dataclasses import dataclass, field
 import logging
@@ -49,7 +48,16 @@ class Config:
             "/5e/46/5e46bc830d84fbad826963d2e2223f15fba27a05bef94814efa84e3bb3fcb7ef.png"
         ]
     )
-    headers: Dict[str, str] = field(default_factory=lambda: {"accept": "text/css"})
+    headers: Dict[str, str] = field(
+        default_factory=lambda: {
+            "accept": "text/css",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            ),
+        }
+    )
     aria2_rpc_url: str = "http://localhost:6888/jsonrpc"
 
 
@@ -60,6 +68,33 @@ BIG_RETRY_TIMES = 5
 BIG_RETRY_BASE_INTERVAL = 20
 
 MAX_TOTAL_RETRY = BIG_RETRY_TIMES * (SMALL_RETRY_TIMES + 1)
+
+
+def get_site_base_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/") + "/"
+    api_suffix = "api/v1/"
+    if normalized.endswith(api_suffix):
+        return normalized[:-len(api_suffix)]
+    return normalized
+
+
+def build_kemono_referer(
+        config: Config,
+        service: str,
+        userID: str,
+        postID: str | None = None,
+) -> str:
+    user_page = f"{get_site_base_url(config.baseUrl)}{service}/user/{userID}"
+    if postID:
+        return f"{user_page}/post/{postID}"
+    return user_page
+
+
+def build_request_headers(config: Config, referer: str | None = None) -> Dict[str, str]:
+    headers = dict(config.headers)
+    if referer:
+        headers["Referer"] = referer
+    return headers
 
 
 # ---------------------------
@@ -395,6 +430,10 @@ def getPost(postID: str, userID: str, service: str, config: Config):
     通过 config 提供的参数（baseUrl, proxies, headers, maxRetries, baseBackoffFactor, folder, targetOS, skipPic, embedCount）
     """
     url = config.baseUrl + service + "/user/" + userID + "/post/" + postID
+    headers = build_request_headers(
+        config,
+        referer=build_kemono_referer(config, service, userID, postID),
+    )
     data = None
 
     for attempt in range(config.maxRetries):
@@ -405,7 +444,7 @@ def getPost(postID: str, userID: str, service: str, config: Config):
             response = requests.get(
                 url,
                 proxies=config.proxies,
-                headers=config.headers,
+                headers=headers,
             )
             response.raise_for_status()
             flag = True
@@ -568,6 +607,10 @@ def getPostFromPage(
         o -= 1
 
     profileUrl = config.baseUrl + service + "/user/" + userID + "/profile"
+    user_page_headers = build_request_headers(
+        config,
+        referer=build_kemono_referer(config, service, userID),
+    )
 
     response = None
     for attempt in range(config.maxRetries):
@@ -577,7 +620,7 @@ def getPostFromPage(
             response = requests.get(
                 profileUrl,
                 proxies=config.proxies,
-                headers=config.headers,
+                headers=user_page_headers,
             )
             response.raise_for_status()
             flag = True
@@ -657,7 +700,7 @@ def getPostFromPage(
                 response = requests.get(
                     url,
                     proxies=config.proxies,
-                    headers=config.headers,
+                    headers=user_page_headers,
                 )
                 response.raise_for_status()
                 flag = True
@@ -770,7 +813,7 @@ def sanitizeFilenameAdvanced(
             "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         }
 
-    base = Path(filename).name
+    base = filename
     base = unicodedata.normalize("NFKC", base)
 
     processed_chars = []
