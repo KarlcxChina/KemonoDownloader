@@ -1,39 +1,36 @@
-# KemonoDownloader
+[简体中文](./ReadMe_ZH_CN.md)
 
-一个用于从 Kemono Party 批量下载创作者内容的 Python 工具。
+# KemonoDownloader (actually PawchiveDownloader)
 
+A Python tool for batch-downloading creator content from Kemono.
 
+Since Kemono has stopped providing download services, the default download source is now [**Pawchive**](https://pawchive.st/).
 
-## 功能特性
+[**Pawchive**](https://pawchive.st/) is a mirror of Kemono.cr. It preserves all thumbnails and text resources after Kemono stopped its download service.
 
--  批量下载指定创作者的所有帖子及附件
--  使用 Aria2 而不是 curl / request 进行高效下载，可通过 AriaNg 可视化查看进度
-- 可选使用远程 Aria2 服务器进行下载
--  自动重试机制，应对 网络 / Kemono / 代理 不稳定情况
--  支持 HTTP/HTTPS 代理
--  自动创建按帖子组织的文件夹结构
--  相比旧版本，支持下载预览图、各类附件文件和嵌入链接
--  完整保存帖子内容为 HTML 文件
--  跨平台支持（Windows / Linux）
-- 
+## Features
 
-## 依赖
+- Batch-download all posts and attachments from a specified creator.
+- Uses Aria2 instead of curl / requests for efficient downloads, with progress viewable through the AriaNg web UI.
+- Optional support for downloading through a remote Aria2 server.
+- Automatic retry mechanism for unstable network / Kemono / proxy conditions.
+- HTTP/HTTPS proxy support.
+- Automatically creates a folder structure organized by post.
+- Compared with older versions, supports downloading previews, various attachment files, and embedded links.
+- Saves full post content as HTML files.
+- Cross-platform support (Windows / Linux).
+
+## Dependencies
 
 - Python 3.10+
-
 - [requests](https://pypi.org/project/requests/)
+- [Aria2](https://github.com/aria2/aria2/releases/tag/release-1.37.0) (use either a specified download server or a local `aria2c` executable)
 
-- [Aria2](https://github.com/aria2/aria2/releases/tag/release-1.37.0)（指定下载服务器或使用本地 aria2c 可执行文件）
+## Usage
 
-  
+### Download the Tool and Configuration Files
 
-## 使用方法
-
-
-
-### 下载工具和配置文件
-
-下载最新的 Release 或者下载
+Download the latest Release, or download the following three files:
 
 > aria2.conf
 >
@@ -41,127 +38,156 @@
 >
 > main.py
 
-三个文件，并从 [Aria2 release](https://github.com/aria2/aria2/releases/tag/release-1.37.0)  页面下载合适您系统的版本，放在和以上三个文件相同的目录下
+Then download the appropriate version for your system from the [Aria2 release page](https://github.com/aria2/aria2/releases/tag/release-1.37.0), and place it in the same directory as the three files above.
 
-安装依赖：
+Install dependencies:
 
-```
+```bash
 pip install requests
 ```
 
-或者下载 requirements.txt 并执行
-```
+Alternatively, download `requirements.txt` and run:
+
+```bash
 pip install -r requirements.txt
 ```
 
+### Download Server Configuration
 
+If you have your own Aria2 download server, or if an Aria2 server is already running locally, you can configure the Aria2 download service with the command-line arguments below.
 
-### 下载服务器配置
+If you do not know what Aria2 is, or if you do not want to add download records to an existing server, you can skip server configuration and use the Aria2 download server started by the program. The server started by the program uses port `6888`, so it will not conflict with an existing local server, if one exists.
 
-如果你拥有自己的 Aria2 下载服务器，或者本地已经运行了Aria2服务器，可以通过下面的命令行参数配置 Aria2 下载服务
+### Basic Usage
 
-如果你不知道什么是 Aria2 ，或者不想将在已有服务器中添加下载记录，可以不配置服务器，使用程序拉起的 Aria2 下载服务器进行下载。程序拉起的服务器使用6888端口，不会和本地已有服务器（如果有）冲突。
-
-
-
-### 基本用法
-
-本程序暂时仅支持命令行调用，不支持直接运行
+This program currently only supports command-line usage and does not support direct launching.
 
 ```bash
-python main.py <用户ID> <服务名称>
+python main.py <user ID> <service name>
 ```
-或
+
+or
+
 ```cmd
-KemonoDownloader.exe <用户ID> <服务名称>
+KemonoDownloader.exe <user ID> <service name>
 ```
 
-**示例：**
+**Example:**
 
-如果Artist的页面链接为：
+If the artist page URL is:
 
+```text
+https://pawchive.st/fanbox/user/12345678
 ```
-https://kemono.cr/fanbox/user/12345678
-```
 
-那么使用命令为：
+Then the command is:
+
 ```bash
 python main.py 12345678 fanbox
 ```
-或
+
+or
+
 ```cmd
 KemonoDownloader.exe 12345678 fanbox
 ```
 
+### Posts Whose Attachments Were Not Crawled by Pawchive
 
+If the attachments of a crawled post have not been archived by Pawchive, the program will only
 
-### 命令行参数
+### Command-Line Arguments
 
-| 参数                    | 说明                                                         | 默认值                          |
-| ----------------------- | ------------------------------------------------------------ | ------------------------------- |
-| `userid`                | 目标用户的 ID（必填）                                        | -                               |
-| `service`               | 服务名称，如 `fanbox`、`patreon` 等（必填）                  | -                               |
-| `--base_url`            | Kemono 基础 URL，应对Kemono更换域名，可能也可以用于同架构网站下载（未测试）。 | `https://kemono.cr/`            |
-| `--proxy_url`           | HTTP/HTTPS 代理地址                                          | `None`                          |
-| `--max_retries`         | 页面请求最大重试次数                                         | `5`                             |
-| `--base_backoff_factor` | 页面请求重试延迟基准因子（秒）                               | `3. 0`                          |
-| `--folder`              | 下载目标文件夹                                               | 当前工作目录                    |
-| `--post_begins`         | 从第 N 个帖子开始下载                                        | `1`                             |
-| `--post_counts`         | 下载帖子数量（0 表示全部）                                   | `0`                             |
-| `--aria2-rpc-url`       | Aria2 JSON-RPC 地址                                          | `http://localhost:6888/jsonrpc` |
+| Argument                | Description                                                                   | Default                         |
+| ----------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| `userid`                | Target user ID (required)                                                     | -                               |
+| `service`               | Service name, such as `fanbox`, `patreon`, etc. (required)                    | -                               |
+| `--base_url`            | Kemono base URL. Currently points to Pawchive by default.                     | `https://pawchive.st/`          |
+| `--file_server`         | Pawchive download server URL                                                  | `https://file.pawchive.st/`     |
+| `--proxy_url`           | HTTP/HTTPS proxy address                                                      | `None`                          |
+| `--max_retries`         | Maximum number of retries for page requests                                   | `5`                             |
+| `--base_backoff_factor` | Base factor for page request retry delay (seconds)                            | `3.0`                           |
+| `--folder`              | Target download folder                                                        | Current working directory       |
+| `--post_begins`         | Start downloading from the Nth post                                           | `1`                             |
+| `--post_counts`         | Number of posts to download (`0` means all posts)                             | `0`                             |
+| `--aria2-rpc-url`       | Aria2 JSON-RPC address                                                        | `http://localhost:6888/jsonrpc` |
+| `--kemono_mode`         | Compatibility option for use if Kemono comes back online                      | `false`                         |
 
+### Language Configuration
 
+The program chooses its display language automatically:
 
-### 使用代理
+- Chinese system locale: Chinese output.
+- Any other locale: English output.
+
+You can override the detected language with the `KEMONO_DOWNLOADER_LANG` environment variable. Values starting with `zh` use Chinese; other values such as `en` use English. This affects console logs, error messages, and `--help` text.
+
+PowerShell:
+
+```powershell
+$env:KEMONO_DOWNLOADER_LANG = "en"
+python main.py 12345678 fanbox
+```
+
+Command Prompt:
+
+```cmd
+set KEMONO_DOWNLOADER_LANG=en
+KemonoDownloader.exe 12345678 fanbox
+```
+
+Bash:
+
+```bash
+KEMONO_DOWNLOADER_LANG=en python main.py 12345678 fanbox
+```
+
+### Kemono Mode
+
+Corresponds to the command-line argument `--kemono_mode`.
+
+Pawchive's server behavior differs somewhat from Kemono's. If Kemono provides file downloads again, or if you need to download files from another server that behaves the same way as Kemono, point `--base_url` to Kemono and set this parameter to `true`.
+
+### Using a Proxy
 
 ```bash
 python main.py 12345678 fanbox --proxy_url http://127.0.0.1:7897
 ```
 
-
-
-### 指定下载范围
+### Specify a Download Range
 
 ```bash
-# 从第 10 个帖子开始，下载 20 个帖子
+# Start from the 10th post and download 20 posts
 python main.py 12345678 fanbox --post_begins 10 --post_counts 20
 ```
 
+## Output Structure
 
+Downloaded content is organized as follows:
 
-## 输出结构
-
-下载的内容会按以下结构组织：
-
-```
-<下载目录>/
-└── <服务名>_<用户名>/
-    ├── <发布日期>_<帖子标题>_<帖子ID>/
-    │   ├── ! Content.html       # 帖子内容
-    │   ├── 附件文件... 
-    │   └── em0_xxx. url         # 嵌入链接
-    └── ... 
+```text
+<download directory>/
+└── <service name>_<username>/
+    ├── <publish date>_<post title>_<post ID>/
+    │   ├── ! Content.html       # Post content
+    │   ├── attachment files...
+    │   └── em0_xxx.url          # Embedded link
+    └── ...
 ```
 
+## Logs
 
+- Real-time INFO-level logs are printed to the console.
+- A `kemono_downloader.log` file is generated in the download directory, recording detailed DEBUG-level logs.
 
-## 日志
+## Aria2 Configuration
 
-- 控制台实时输出 INFO 级别日志
-- 下载目录下生成 `kemono_downloader. log` 文件，记录 DEBUG 级别详细日志
+If `--aria2-rpc-url` is not specified, the program automatically starts `aria2c` from the same directory. Make sure that:
 
+1. The `aria2c` / `aria2c.exe` executable exists in the program directory.
+2. The `aria2.conf` configuration file exists in the program directory.
+3. Open the [official AriaNg demo](<https://ariang.mayswind.net/latest/#!/settings/rpc/set?protocol=http&host=localhost&port=6888&interface=jsonrpc>) to view download progress. The link sets RPC to the local aria2 URL `http://localhost:6888/jsonrpc`, so a local `AriaNg.html` is no longer needed.
 
-
-## Aria2 配置
-
-如果未指定 `--aria2-rpc-url`，程序会自动在同目录下启动 `aria2c`，需要确保：
-
-1. `aria2c` / `aria2c.exe` 可执行文件存在于程序目录
-2. `aria2.conf` 配置文件存在于程序目录
-3. 可通过浏览器打开 `AriaNg.html` 查看下载进度
-
-
-
-## 许可证
+## License
 
 MIT License
