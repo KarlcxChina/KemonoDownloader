@@ -1,14 +1,14 @@
 [简体中文](./ReadMe_ZH_CN.md)
 
-# KemonoDownloader (actually PawchiveDownloader)
+# fKemonoDownloader (actually PawchiveDownloader)
 
 A Python tool for batch-downloading creator content from Kemono.
 
-Since Kemono has stopped providing download services, the default download source is now [**Pawchive**](https://pawchive.st/).
+Since Kemono has stopped providing download services, the default download source is now [**Pawchive**](https://pawchive.pw/).
 
-[**Pawchive**](https://pawchive.st/) is a mirror of Kemono.cr. It preserves all thumbnails and text resources after Kemono stopped its download service.
+[**Pawchive**](https://pawchive.pw/) is a mirror of Kemono.cr. It preserves all thumbnails and text resources after Kemono stopped its download service.
 
-## Features
+## Featuresf
 
 - Batch-download all posts and attachments from a specified creator.
 - Uses Aria2 instead of curl / requests for efficient downloads, with progress viewable through the AriaNg web UI.
@@ -77,7 +77,7 @@ KemonoDownloader.exe <user ID> <service name>
 If the artist page URL is:
 
 ```text
-https://pawchive.st/fanbox/user/12345678
+https://pawchive.pw/fanbox/user/12345678
 ```
 
 Then the command is:
@@ -98,21 +98,21 @@ If the attachments of a crawled post have not been archived by Pawchive, the pro
 
 ### Command-Line Arguments
 
-| Argument                | Description                                                                   | Default                         |
-| ----------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
-| `userid`                | Target user ID (required)                                                     | -                               |
-| `service`               | Service name, such as `fanbox`, `patreon`, etc. (required)                    | -                               |
-| `--base_url`            | Kemono base URL. Currently points to Pawchive by default.                     | `https://pawchive.st/`          |
-| `--file_server`         | Pawchive download server URL                                                  | `https://file.pawchive.st/`     |
-| `--proxy_url`           | HTTP/HTTPS proxy address                                                      | `None`                          |
-| `--max_retries`         | Maximum number of retries for page requests                                   | `5`                             |
-| `--base_backoff_factor` | Base factor for page request retry delay (seconds)                            | `3.0`                           |
-| `--folder`              | Target download folder                                                        | Current working directory       |
-| `--post_begins`         | Start downloading from the Nth post                                           | `1`                             |
-| `--post_counts`         | Number of posts to download (`0` means all posts)                             | `0`                             |
-| `--aria2-rpc-url`       | Aria2 JSON-RPC address                                                        | `http://localhost:6888/jsonrpc` |
-| `--kemono_mode`         | Compatibility option for use if Kemono comes back online                      | `false`                         |
-| `--number_attachments`  | Attachment numbering mode: `off`/`on`/`image`/`rename`/`image_rename`         | `off`                           |
+| Argument                | Description                                                  | Default                         |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------- |
+| `userid`                | Target user ID (required)                                    | -                               |
+| `service`               | Service name, such as `fanbox`, `patreon`, etc. (required)   | -                               |
+| `--base_url`            | Kemono base URL. Currently points to Pawchive by default.    | `https://pawchive.pw/`          |
+| `--file_server`         | Pawchive download server URL                                 | `https://file.pawchive.pw/`     |
+| `--proxy_url`           | HTTP/HTTPS proxy address                                     | `None`                          |
+| `--max_retries`         | Maximum number of retries for page requests                  | `5`                             |
+| `--base_backoff_factor` | Base factor for page request retry delay (seconds)           | `3.0`                           |
+| `--folder`              | Target download folder                                       | Current working directory       |
+| `--post_begins`         | Start downloading from the Nth post                          | `1`                             |
+| `--post_counts`         | Number of posts to download (`0` means all posts)            | `0`                             |
+| `--aria2-rpc-url`       | Aria2 JSON-RPC address                                       | `http://localhost:6888/jsonrpc` |
+| `--kemono_mode`         | Compatibility option for use if Kemono comes back online     | `false`                         |
+| `--number_attachments`  | Attachment numbering mode: `off`/`on`/`image`/`rename`/`image_rename` | `off`                           |
 
 ### Language Configuration
 

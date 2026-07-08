@@ -6,3 +6,4 @@ dist/*
 build/*
 *.spec
 KemonoDownloadertest/*
+/__pycache__

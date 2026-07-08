@@ -1722,7 +1722,10 @@ def sanitizeFilenameAdvanced(
     processed_chars = []
     for ch in base:
         illegal = False
-        if target == "windows":
+        codepoint = ord(ch)
+        if codepoint < 32 or codepoint == 127:
+            illegal = True
+        elif target == "windows":
             if ch in '<>:"/\\|?*':
                 illegal = True
         else:
@@ -1833,8 +1836,8 @@ def parse_number_attachments_arg(value):
 def parse_args():
     configure_argparse_language()
 
-    default_baseUrl = "https://pawchive.st/"
-    default_fileServer = "https://file.pawchive.st/"
+    default_baseUrl = "https://pawchive.pw/"
+    default_fileServer = "https://file.pawchive.pw/"
     default_max_retries = 5
     default_base_backoff_factor = 3.0
     default_folder = os.getcwd()

@@ -2,9 +2,9 @@
 
 一个用于从 Kemono 批量下载创作者内容的 Python 工具
 
-由于Kemono停止了下载服务，现在默认从 [**Pawchive**](https://pawchive.st/) 下载
+由于Kemono停止了下载服务，现在默认从 [**Pawchive**](https://pawchive.pw/) 下载
 
-[**Pawchive**](https://pawchive.st/) 是 Kemono.cr 的一个镜像，保存了 Kemono 停止下载服务后的所有缩略图以及文本资源
+[**Pawchive**](https://pawchive.pw/) 是 Kemono.cr 的一个镜像，保存了 Kemono 停止下载服务后的所有缩略图以及文本资源
 
 
 
@@ -94,7 +94,7 @@ KemonoDownloader.exe <用户ID> <服务名称>
 如果Artist的页面链接为：
 
 ```
-https://pawchive.st/fanbox/user/12345678
+https://pawchive.pw/fanbox/user/12345678
 ```
 
 那么使用命令为：
@@ -116,20 +116,20 @@ KemonoDownloader.exe 12345678 fanbox
 
 ### 命令行参数
 
-| 参数                    | 说明                                        | 默认值                          |
-| ----------------------- | ------------------------------------------- | ------------------------------- |
-| `userid`                | 目标用户的 ID（必填）                       | -                               |
-| `service`               | 服务名称，如 `fanbox`、`patreon` 等（必填） | -                               |
-| `--base_url`            | Kemono 基础 URL，现在默认指向 Pawchive。    | `https://pawchive.st/`          |
-| `--file_server`         | Pawchive 下载服务器URL                      | `https://file.pawchive.st/`     |
-| `--proxy_url`           | HTTP/HTTPS 代理地址                         | `None`                          |
-| `--max_retries`         | 页面请求最大重试次数                        | `5`                             |
-| `--base_backoff_factor` | 页面请求重试延迟基准因子（秒）              | `3. 0`                          |
-| `--folder`              | 下载目标文件夹                              | 当前工作目录                    |
-| `--post_begins`         | 从第 N 个帖子开始下载                       | `1`                             |
-| `--post_counts`         | 下载帖子数量（0 表示全部）                  | `0`                             |
-| `--aria2-rpc-url`       | Aria2 JSON-RPC 地址                         | `http://localhost:6888/jsonrpc` |
-| `--kemono_mode`         | Kemono复活时的兼容性选项                    | `false`                         |
+| 参数                    | 说明                                                         | 默认值                          |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------- |
+| `userid`                | 目标用户的 ID（必填）                                        | -                               |
+| `service`               | 服务名称，如 `fanbox`、`patreon` 等（必填）                  | -                               |
+| `--base_url`            | Kemono 基础 URL，现在默认指向 Pawchive。                     | `https://pawchive.pw/`          |
+| `--file_server`         | Pawchive 下载服务器URL                                       | `https://file.pawchive.pw/`     |
+| `--proxy_url`           | HTTP/HTTPS 代理地址                                          | `None`                          |
+| `--max_retries`         | 页面请求最大重试次数                                         | `5`                             |
+| `--base_backoff_factor` | 页面请求重试延迟基准因子（秒）                               | `3. 0`                          |
+| `--folder`              | 下载目标文件夹                                               | 当前工作目录                    |
+| `--post_begins`         | 从第 N 个帖子开始下载                                        | `1`                             |
+| `--post_counts`         | 下载帖子数量（0 表示全部）                                   | `0`                             |
+| `--aria2-rpc-url`       | Aria2 JSON-RPC 地址                                          | `http://localhost:6888/jsonrpc` |
+| `--kemono_mode`         | Kemono复活时的兼容性选项                                     | `false`                         |
 | `--number_attachments`  | 附件编号模式：`off`/`on`/`image`/`rename`/`image_rename`，也支持中文模式名 | `off`                           |
 
 ### 语言配置
