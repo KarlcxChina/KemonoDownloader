@@ -1,6 +1,6 @@
 [简体中文](./ReadMe_ZH_CN.md)
 
-# fKemonoDownloader (actually PawchiveDownloader)
+# KemonoDownloader (actually PawchiveDownloader)
 
 A Python tool for batch-downloading creator content from Kemono.
 
