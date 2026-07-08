@@ -2156,9 +2156,9 @@ def start_aria2_process(proxy_url: Optional[str]) -> subprocess.Popen:
     ariang_demo_url = build_ariang_rpc_setup_url(LOCAL_ARIA2_RPC_URL)
     logger.info(i18n(
         f"可打开 AriaNg 官方 demo 查看下载进度（按住Ctrl并点击下面的链接）:\n "
-        f"{LOCAL_ARIA2_RPC_URL}: {ariang_demo_url}",
+        f"{ariang_demo_url}",
         f"Open the official AriaNg demo to view download progress (hold Ctrl and click the link below) :\n "
-        f"{LOCAL_ARIA2_RPC_URL}: {ariang_demo_url}",
+        f"{ariang_demo_url}",
     ))
     time.sleep(5)
 
