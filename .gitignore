@@ -5,4 +5,4 @@ aria2c.exe
 dist/*
 build/*
 *.spec
-test/*
+KemonoDownloadertest/*

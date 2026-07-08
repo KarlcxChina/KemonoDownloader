@@ -127,6 +127,28 @@ def configure_argparse_language() -> None:
 LOCAL_ARIA2_RPC_URL = "http://localhost:6888/jsonrpc"
 ARIANG_OFFICIAL_DEMO_BASE_URL = "https://ariang.mayswind.net/latest"
 
+NUMBER_ATTACHMENTS_OFF = "off"
+NUMBER_ATTACHMENTS_ALL = "all"
+NUMBER_ATTACHMENTS_IMAGES = "images"
+NUMBER_ATTACHMENTS_RENAME_ALL = "rename"
+NUMBER_ATTACHMENTS_RENAME_IMAGES = "rename_images"
+
+IMAGE_ATTACHMENT_EXTENSIONS = {
+    ".apng",
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".ico",
+    ".jfif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".svg",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+
 
 @dataclass
 class Config:
@@ -147,7 +169,16 @@ class Config:
     )
     headers: Dict[str, str] = field(
         default_factory=lambda: {
-            "accept": "text/css",
+            "Accept": "application/json,text/plain,*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Sec-CH-UA": '"Microsoft Edge";v="146", "Chromium";v="146", "Not=A?Brand";v="24"',
+            "Sec-CH-UA-Mobile": "?0",
+            "Sec-CH-UA-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -156,6 +187,11 @@ class Config:
         }
     )
     aria2_rpc_url: str = LOCAL_ARIA2_RPC_URL
+    session: requests.Session = field(default_factory=requests.Session)
+    emptyContentPosts: Dict[str, dict] = field(default_factory=dict)
+    emptyContentRetryMilestones: List[int] = field(default_factory=lambda: [1, 3, 7, 13])
+    emptyContentRetryMilestonesDone: set = field(default_factory=set)
+    numberAttachmentsMode: str = NUMBER_ATTACHMENTS_OFF
 
 
 SMALL_RETRY_TIMES = 2
@@ -215,6 +251,162 @@ def build_request_headers(config: Config, referer: str | None = None) -> Dict[st
     return headers
 
 
+def build_browser_page_headers(config: Config, referer: str | None = None) -> Dict[str, str]:
+    headers = build_request_headers(config, referer)
+    headers.update(
+        {
+            "Accept": "application/json,text/plain,*/*",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin" if referer else "none",
+        }
+    )
+    return headers
+
+
+def visit_post_page_before_api(postID: str, userID: str, service: str, config: Config):
+    post_page_url = build_kemono_referer(config, service, userID, postID)
+    user_page_url = build_kemono_referer(config, service, userID)
+    headers = build_browser_page_headers(config, referer=user_page_url)
+
+    try:
+        logger.info(i18n(
+            f"预访问帖子网页路径: {post_page_url}",
+            f"Pre-visiting post page URL: {post_page_url}",
+        ))
+        response = config.session.get(
+            post_page_url,
+            proxies=config.proxies,
+            headers=headers,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.warning(i18n(
+            f"预访问帖子网页路径失败，继续请求 API: {e}",
+            f"Post page pre-visit failed; continuing with API request: {e}",
+        ))
+    except Exception as e:
+        logger.warning(i18n(
+            f"预访问帖子网页路径发生未知错误，继续请求 API: {e}",
+            f"Unexpected post page pre-visit error; continuing with API request: {e}",
+        ))
+
+
+def fetch_post_detail_data(
+        postID: str,
+        userID: str,
+        service: str,
+        config: Config,
+):
+    url = config.baseUrl + service + "/user/" + userID + "/post/" + postID
+    headers = build_request_headers(
+        config,
+        referer=build_kemono_referer(config, service, userID, postID),
+    )
+    data = None
+
+    visit_post_page_before_api(postID, userID, service, config)
+
+    for attempt in range(config.maxRetries):
+        try:
+            response = config.session.get(
+                url,
+                proxies=config.proxies,
+                headers=headers,
+            )
+            response.raise_for_status()
+
+            try:
+                data = response.json()
+                if data:
+                    return data
+                logger.warning(i18n(
+                    f"帖子详情 JSON 为空 (尝试 {attempt + 1}/{config.maxRetries})。",
+                    f"Post detail JSON is empty (attempt {attempt + 1}/{config.maxRetries}).",
+                ))
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    i18n(
+                        f"错误：无效的 JSON 字符串，可能是网络错误 "
+                        f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                        f"Error: invalid JSON, possibly due to a network issue "
+                        f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
+                    )
+                )
+            except AttributeError as e:
+                logger.warning(
+                    i18n(
+                        f"错误：JSON 对象结构不符合预期，可能是网络错误 "
+                        f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                        f"Error: unexpected JSON object structure, possibly due to a network issue "
+                        f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
+                    )
+                )
+
+        except requests.exceptions.Timeout:
+            logger.warning(i18n(
+                f"获取帖子超时 (尝试 {attempt + 1}/{config.maxRetries}): {url}",
+                f"Timed out while fetching post (attempt {attempt + 1}/{config.maxRetries}): {url}",
+            ))
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code is not None and 500 <= status_code < 600:
+                logger.warning(
+                    i18n(
+                        f"获取帖子遭遇服务器错误 (HTTP {status_code}) "
+                        f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                        f"Server error while fetching post (HTTP {status_code}) "
+                        f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
+                    )
+                )
+            elif status_code == 429:
+                logger.warning(
+                    i18n(
+                        f"获取帖子遭遇服务器错误 (HTTP 429) "
+                        f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                        f"Rate limited while fetching post (HTTP 429) "
+                        f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
+                    )
+                )
+            else:
+                logger.error(
+                    i18n(
+                        f"获取帖子失败 (HTTP {status_code if status_code is not None else 'Unknown'})，不重试: {e}",
+                        f"Failed to fetch post (HTTP {status_code if status_code is not None else 'Unknown'}); not retrying: {e}",
+                    )
+                )
+                return None
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                i18n(
+                    f"获取帖子时发生网络错误 (尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                    f"Network error while fetching post (attempt {attempt + 1}/{config.maxRetries}): {e}",
+                )
+            )
+        except Exception as e:
+            logger.error(
+                i18n(
+                    f"获取帖子时发生未知错误 (尝试 {attempt + 1}/{config.maxRetries}): {e}",
+                    f"Unexpected error while fetching post (attempt {attempt + 1}/{config.maxRetries}): {e}",
+                )
+            )
+
+        if attempt < config.maxRetries - 1:
+            waitTime = config.baseBackoffFactor * (2 ** attempt)
+            logger.info(i18n(
+                f"将在 {waitTime:.2f} 秒后重试...",
+                f"Retrying in {waitTime:.2f} seconds...",
+            ))
+            time.sleep(waitTime)
+        else:
+            logger.error(i18n(
+                f"所有 {config.maxRetries} 次尝试获取帖子均失败。",
+                f"All {config.maxRetries} attempts to fetch the post failed.",
+            ))
+
+    return None
+
+
 def get_attachment_server(attachment: dict, config: Config) -> str:
     if config.kemonoMode:
         return attachment.get("server")
@@ -272,11 +464,18 @@ def downloadRes(
         targetFolder: str,
         aria2_rpc_url: str = "http://localhost:6888/jsonrpc",
         aria2_token: str = None,
+        sourceAttachmentName: str | None = None,
+        targetOS: str = "windows",
 ) -> str:
     """
     使用 aria2 RPC 添加下载任务，返回 aria2 分配的 GID。
     """
-    targetUrl = server.rstrip("/") + "/data" + path + "?f=" + attachmentName
+    attachmentName = sanitizeFilenameAdvanced(str(attachmentName), targetOS)
+    urlAttachmentName = sanitizeFilenameAdvanced(
+        str(sourceAttachmentName or attachmentName),
+        targetOS,
+    )
+    targetUrl = server.rstrip("/") + "/data" + path + "?" + urlencode({"f": urlAttachmentName})
 
     options = {
         "dir": targetFolder,
@@ -340,12 +539,221 @@ def saveRes(targetFolder: str, filename: str, picContent: bytes, config: Config)
 class DownloadTask:
     gid: str
     attachment: dict
+    attachmentName: str
+    sourceName: str
     targetFolder: str
     retry_count: int = 0
 
 
-def submit_all_attachments(
+@dataclass
+class AttachmentNamePlan:
+    attachment: dict
+    source_name: str
+    existing_name: str
+    download_name: str
+    should_number: bool = False
+
+
+def is_attachment_numbering_enabled(config: Config) -> bool:
+    return config.numberAttachmentsMode != NUMBER_ATTACHMENTS_OFF
+
+
+def is_attachment_numbering_rename_mode(config: Config) -> bool:
+    return config.numberAttachmentsMode in (
+        NUMBER_ATTACHMENTS_RENAME_ALL,
+        NUMBER_ATTACHMENTS_RENAME_IMAGES,
+    )
+
+
+def is_attachment_numbering_image_only(config: Config) -> bool:
+    return config.numberAttachmentsMode in (
+        NUMBER_ATTACHMENTS_IMAGES,
+        NUMBER_ATTACHMENTS_RENAME_IMAGES,
+    )
+
+
+def get_attachment_source_name(attachment: dict) -> str:
+    name = attachment.get("name")
+    if name is not None and str(name) != "":
+        return str(name)
+
+    path = attachment.get("path")
+    if path is not None and str(path) != "":
+        fallback = os.path.basename(str(path).rstrip("/"))
+        if fallback:
+            return fallback
+
+    return "attachment"
+
+
+def get_attachment_extension(attachment: dict) -> str:
+    for key in ("name", "path", "url"):
+        value = attachment.get(key)
+        if not value:
+            continue
+        clean_value = str(value).split("?", 1)[0].split("#", 1)[0]
+        ext = os.path.splitext(clean_value)[1].lower()
+        if ext:
+            return ext
+    return ""
+
+
+def is_image_attachment(attachment: dict) -> bool:
+    att_type = str(attachment.get("type") or "").strip().lower()
+    if att_type in ("thumbnail", "image", "picture", "preview"):
+        return True
+    if att_type == "embed":
+        return False
+    return get_attachment_extension(attachment) in IMAGE_ATTACHMENT_EXTENSIONS
+
+
+def is_numberable_attachment(attachment: dict) -> bool:
+    return str(attachment.get("type") or "").strip().lower() != "embed"
+
+
+def build_numbered_attachment_name(filename: str, index: int, width: int, config: Config) -> str:
+    prefix = f"{index:0{width}d}_"
+    return sanitizeFilenameAdvanced(prefix + filename, config.targetOS)
+
+
+def prepare_attachment_name_plans(
+        previews: List[dict],
         attachments: List[dict],
+        config: Config,
+) -> tuple[List[AttachmentNamePlan], List[AttachmentNamePlan]]:
+    preview_plans = []
+    for attachment in previews:
+        source_name = sanitizeFilenameAdvanced(
+            get_attachment_source_name(attachment),
+            config.targetOS,
+        )
+        preview_plans.append(
+            AttachmentNamePlan(
+                attachment=attachment,
+                source_name=source_name,
+                existing_name=source_name,
+                download_name=source_name,
+            )
+        )
+
+    attachment_plans = []
+    for attachment in attachments:
+        source_name = get_attachment_source_name(attachment)
+        existing_name = sanitizeFilenameAdvanced(source_name, config.targetOS)
+        attachment_plans.append(
+            AttachmentNamePlan(
+                attachment=attachment,
+                source_name=existing_name,
+                existing_name=existing_name,
+                download_name=existing_name,
+            )
+        )
+
+    if not is_attachment_numbering_enabled(config):
+        return preview_plans, attachment_plans
+
+    image_only = is_attachment_numbering_image_only(config)
+    target_plans = [
+        plan
+        for plan in preview_plans + attachment_plans
+        if is_numberable_attachment(plan.attachment)
+        and (not image_only or is_image_attachment(plan.attachment))
+    ]
+    width = max(2, len(str(len(target_plans))))
+    for index, plan in enumerate(target_plans):
+        plan.should_number = True
+        plan.download_name = build_numbered_attachment_name(
+            plan.existing_name,
+            index,
+            width,
+            config,
+        )
+
+    return preview_plans, attachment_plans
+
+
+def find_existing_numbered_attachment(targetFolder: str, existingName: str) -> Optional[str]:
+    if not os.path.isdir(targetFolder):
+        return None
+
+    for filename in os.listdir(targetFolder):
+        if not filename.endswith(existingName):
+            continue
+        prefix = filename[:-len(existingName)]
+        if prefix.endswith("_") and prefix[:-1].isdigit():
+            return os.path.join(targetFolder, filename)
+
+    return None
+
+
+def rename_existing_attachment_files(
+        attachment_plans: List[AttachmentNamePlan],
+        postFolder: str,
+) -> bool:
+    target_plans = [plan for plan in attachment_plans if plan.should_number]
+    if not target_plans:
+        logger.info(i18n(
+            "没有符合编号条件的附件文件。",
+            "No attachment files matched the numbering mode.",
+        ))
+        return True
+
+    renamed_count = 0
+    skipped_count = 0
+    missing_count = 0
+
+    for plan in target_plans:
+        source_path = os.path.join(postFolder, plan.existing_name)
+        target_path = os.path.join(postFolder, plan.download_name)
+
+        if os.path.normcase(source_path) == os.path.normcase(target_path):
+            skipped_count += 1
+            continue
+
+        if os.path.exists(target_path):
+            logger.info(i18n(
+                f"已存在编号文件，跳过: {plan.download_name}",
+                f"Numbered file already exists, skipped: {plan.download_name}",
+            ))
+            skipped_count += 1
+            continue
+
+        if not os.path.exists(source_path):
+            numbered_source = find_existing_numbered_attachment(postFolder, plan.existing_name)
+            if numbered_source:
+                source_path = numbered_source
+
+        if not os.path.exists(source_path):
+            logger.warning(i18n(
+                f"未找到可重命名的已下载附件: {plan.existing_name}",
+                f"Downloaded attachment not found for renaming: {plan.existing_name}",
+            ))
+            missing_count += 1
+            continue
+
+        try:
+            os.rename(source_path, target_path)
+            renamed_count += 1
+            logger.info(i18n(
+                f"已重命名附件: {os.path.basename(source_path)} -> {plan.download_name}",
+                f"Renamed attachment: {os.path.basename(source_path)} -> {plan.download_name}",
+            ))
+        except OSError as e:
+            missing_count += 1
+            logger.error(i18n(
+                f"重命名附件失败 {plan.existing_name} -> {plan.download_name}: {e}",
+                f"Failed to rename attachment {plan.existing_name} -> {plan.download_name}: {e}",
+            ))
+
+    logger.info(i18n(
+        f"附件编号重命名完成: 已重命名 {renamed_count}, 跳过 {skipped_count}, 缺失/失败 {missing_count}",
+        f"Attachment numbering rename finished: renamed {renamed_count}, skipped {skipped_count}, missing/failed {missing_count}",
+    ))
+    return missing_count == 0
+
+
+def submit_all_attachments(
+        attachment_plans: List[AttachmentNamePlan],
         targetFolder: str,
         config: Config,
 ) -> List[DownloadTask]:
@@ -353,9 +761,9 @@ def submit_all_attachments(
     先循环提交所有附件，记录 GID，返回 DownloadTask 列表。
     """
     tasks: List[DownloadTask] = []
-    for attachment in attachments:
-        raw_name = str(attachment.get("name"))
-        attachmentName = sanitizeFilenameAdvanced(raw_name, config.targetOS)
+    for plan in attachment_plans:
+        attachment = plan.attachment
+        attachmentName = plan.download_name
         path = attachment.get("path")
         server = get_attachment_server(attachment, config)
 
@@ -367,6 +775,8 @@ def submit_all_attachments(
                 targetFolder,
                 aria2_rpc_url=config.aria2_rpc_url,
                 aria2_token=None,
+                sourceAttachmentName=plan.source_name,
+                targetOS=config.targetOS,
             )
             logger.info(i18n(
                 f"成功提交附件: {attachmentName}, GID={gid}",
@@ -376,6 +786,8 @@ def submit_all_attachments(
                 DownloadTask(
                     gid=gid,
                     attachment=attachment,
+                    attachmentName=attachmentName,
+                    sourceName=plan.source_name,
                     targetFolder=targetFolder,
                     retry_count=0,
                 )
@@ -416,7 +828,7 @@ def poll_and_retry_tasks(
         for task in list(active_tasks):
             gid = task.gid
             attachment = task.attachment
-            attachmentName = attachment.get("name")
+            attachmentName = task.attachmentName
 
             try:
                 res = aria2_rpc_call(
@@ -504,6 +916,8 @@ def poll_and_retry_tasks(
                         task.targetFolder,
                         aria2_rpc_url=config.aria2_rpc_url,
                         aria2_token=None,
+                        sourceAttachmentName=task.sourceName,
+                        targetOS=config.targetOS,
                     )
                     logger.info(
                         i18n(
@@ -516,6 +930,8 @@ def poll_and_retry_tasks(
                     new_task = DownloadTask(
                         gid=new_gid,
                         attachment=attachment,
+                        attachmentName=attachmentName,
+                        sourceName=task.sourceName,
                         targetFolder=task.targetFolder,
                         retry_count=task.retry_count + 1,
                     )
@@ -545,7 +961,7 @@ def poll_and_retry_tasks(
 
 
 def process_attachments_batch(
-        attachments: List[dict],
+        attachment_plans: List[AttachmentNamePlan],
         postFolder: str,
         config: Config,
 ) -> bool:
@@ -554,16 +970,22 @@ def process_attachments_batch(
       1. 先统一提交任务并记录 GID；
       2. 再统一轮询所有 GID 的状态并按需重试。
     """
-    tasks = submit_all_attachments(attachments, postFolder, config)
+    tasks = submit_all_attachments(attachment_plans, postFolder, config)
     return poll_and_retry_tasks(tasks, config)
 
 
 # ---------------------------
 # 帖子抓取核心逻辑
 # ---------------------------
-def process_attachment(attachment, postFolder: str, config: Config):
-    raw_name = str(attachment.get("name"))
-    attachmentName = sanitizeFilenameAdvanced(raw_name, config.targetOS)
+def process_attachment(
+        attachment,
+        postFolder: str,
+        config: Config,
+        name_plan: AttachmentNamePlan | None = None,
+):
+    fallbackName = sanitizeFilenameAdvanced(get_attachment_source_name(attachment), config.targetOS)
+    attachmentName = name_plan.download_name if name_plan else fallbackName
+    sourceName = name_plan.source_name if name_plan else fallbackName
     att_type = attachment.get("type")
 
     if att_type == "thumbnail":
@@ -576,10 +998,12 @@ def process_attachment(attachment, postFolder: str, config: Config):
             downloadRes(
                 attachment.get("path"),
                 get_attachment_server(attachment, config),
-                attachment.get("name"),
+                attachmentName,
                 postFolder,
                 aria2_rpc_url=config.aria2_rpc_url,
                 aria2_token=None,
+                sourceAttachmentName=sourceName,
+                targetOS=config.targetOS,
             )
             return i18n(
                 f"成功处理图片附件: {attachmentName}",
@@ -610,152 +1034,24 @@ def process_attachment(attachment, postFolder: str, config: Config):
     )
 
 
-def getPost(postID: str, userID: str, service: str, config: Config):
-    """
-    通过 config 提供的参数（baseUrl, proxies, headers, maxRetries, baseBackoffFactor, folder, targetOS, skipPic, embedCount）
-    """
-    url = config.baseUrl + service + "/user/" + userID + "/post/" + postID
-    headers = build_request_headers(
-        config,
-        referer=build_kemono_referer(config, service, userID, postID),
-    )
-    data = None
-
-    for attempt in range(config.maxRetries):
-        response = None
-        data = None
-        flag = False
-        try:
-            response = requests.get(
-                url,
-                proxies=config.proxies,
-                headers=headers,
-            )
-            response.raise_for_status()
-            flag = True
-
-        except requests.exceptions.Timeout:
-            logger.warning(i18n(
-                f"获取帖子超时 (尝试 {attempt + 1}/{config.maxRetries}): {url}",
-                f"Timed out while fetching post (attempt {attempt + 1}/{config.maxRetries}): {url}",
-            ))
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and 500 <= e.response.status_code < 600:
-                logger.warning(
-                    i18n(
-                        f"获取帖子遭遇服务器错误 (HTTP {e.response.status_code}) "
-                        f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
-                        f"Server error while fetching post (HTTP {e.response.status_code}) "
-                        f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
-                    )
-                )
-            elif e.response.status_code == 429:
-                logger.warning(
-                    i18n(
-                        f"获取帖子遭遇服务器错误 (HTTP 429) "
-                        f"(尝试 {attempt * 5}/{config.maxRetries}): {e}",
-                        f"Rate limited while fetching post (HTTP 429) "
-                        f"(attempt {attempt * 5}/{config.maxRetries}): {e}",
-                    )
-                )
-            else:
-                logger.error(
-                    i18n(
-                        f"获取帖子失败 (HTTP {e.response.status_code if e.response else 'Unknown'})，不重试: {e}",
-                        f"Failed to fetch post (HTTP {e.response.status_code if e.response else 'Unknown'}); not retrying: {e}",
-                    )
-                )
-                return None
-        except requests.exceptions.RequestException as e:
-            logger.warning(
-                i18n(
-                    f"获取帖子时发生网络错误 (尝试 {attempt + 1}/{config.maxRetries}): {e}",
-                    f"Network error while fetching post (attempt {attempt + 1}/{config.maxRetries}): {e}",
-                )
-            )
-        except Exception as e:
-            logger.error(
-                i18n(
-                    f"获取帖子时发生未知错误 (尝试 {attempt + 1}/{config.maxRetries}): {e}",
-                    f"Unexpected error while fetching post (attempt {attempt + 1}/{config.maxRetries}): {e}",
-                )
-            )
-
-        try:
-            data = response.json()
-            flag = True
-        except json.JSONDecodeError as e:
-            logger.warning(
-                i18n(
-                    f"错误：无效的 JSON 字符串，可能是网络错误 "
-                    f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
-                    f"Error: invalid JSON, possibly due to a network issue "
-                    f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
-                )
-            )
-        except AttributeError as e:
-            logger.warning(
-                i18n(
-                    f"错误：JSON 对象结构不符合预期，可能是网络错误 "
-                    f"(尝试 {attempt + 1}/{config.maxRetries}): {e}",
-                    f"Error: unexpected JSON object structure, possibly due to a network issue "
-                    f"(attempt {attempt + 1}/{config.maxRetries}): {e}",
-                )
-            )
-
-        if flag:
-            break
-
-        if attempt < config.maxRetries - 1:
-            waitTime = config.baseBackoffFactor * (2 ** attempt)
-            logger.info(i18n(
-                f"将在 {waitTime:.2f} 秒后重试...",
-                f"Retrying in {waitTime:.2f} seconds...",
-            ))
-            time.sleep(waitTime)
-        else:
-            logger.error(i18n(
-                f"所有 {config.maxRetries} 次尝试获取帖子均失败。",
-                f"All {config.maxRetries} attempts to fetch the post failed.",
-            ))
-            return None
-
-    if not data:
-        logger.error(i18n(
-            "未收到有效数据，终止处理该帖子。",
-            "No valid data was received; stopping this post.",
-        ))
-        return None
-
-    if config.kemonoMode:
-        post = data.get("post")
-        if not post:
-            logger.error(i18n(
-                "返回的数据中没有 'post' 字段，跳过。",
-                "The returned data does not contain a 'post' field; skipping.",
-            ))
-            return None
-    else:
-        post = data
-
+def build_post_folder_path(post: dict, config: Config) -> tuple[str, str]:
     path = post.get("published")[2:10] + "_" + post.get("title") + "_" + post.get("id")
     path = sanitizeFilenameAdvanced(path, config.targetOS)
-    postFolder = os.path.join(config.folder, path)
-    logger.info(i18n(f"\n\n正在取帖子 {path}", f"\n\nFetching post {path}"))
+    return path, os.path.join(config.folder, path)
 
-    if not os.path.exists(postFolder):
-        os.makedirs(postFolder)
-        logger.info(i18n(f"已创建文件夹: {postFolder}", f"Created folder: {postFolder}"))
 
+def write_post_content_file(post: dict, postFolder: str, config: Config) -> bool:
     contentContent = post.get("content")
 
-    if contentContent is not None and contentContent != "":
-        site_base_url = get_site_base_url(config.baseUrl)
-        content_html = contentContent.replace('src="/', f'src="{site_base_url}')
-        content_html = content_html.replace('href="/', f'href="{site_base_url}')
-        title = str(post.get("title") or "Untitled")
-        escaped_title = html.escape(title)
-        contentContent = f"""
+    if contentContent is None or contentContent == "":
+        return False
+
+    site_base_url = get_site_base_url(config.baseUrl)
+    content_html = contentContent.replace('src="/', f'src="{site_base_url}')
+    content_html = content_html.replace('href="/', f'href="{site_base_url}')
+    title = str(post.get("title") or "Untitled")
+    escaped_title = html.escape(title)
+    contentContent = f"""
         <!doctype html>
         <html>
         <head>
@@ -866,36 +1162,245 @@ def getPost(postID: str, userID: str, service: str, config: Config):
         </body>
         </html>
         """
-        contentPath = os.path.join(postFolder, "!Content.html")
-        try:
-            with open(contentPath, "w", encoding="utf-8") as file:
-                file.write(contentContent)
+    contentPath = os.path.join(postFolder, "!Content.html")
+    try:
+        with open(contentPath, "w", encoding="utf-8") as file:
+            file.write(contentContent)
+        logger.info(i18n(
+            f"内容已成功写入文件: {contentPath}",
+            f"Content written successfully: {contentPath}",
+        ))
+        return True
+    except IOError:
+        logger.error(i18n(
+            f"错误: 无法写入文件 {contentPath}",
+            f"Error: unable to write file {contentPath}",
+        ))
+    except Exception as e:
+        logger.error(i18n(
+            f"发生了一个预料之外的错误: {e}",
+            f"An unexpected error occurred: {e}",
+        ))
+
+    return False
+
+
+def empty_content_key(service: str, userID: str, postID: str) -> str:
+    return f"{service}:{userID}:{postID}"
+
+
+def remember_empty_content_post(
+        config: Config,
+        postID: str,
+        userID: str,
+        service: str,
+        post: dict,
+        postFolder: str,
+):
+    key = empty_content_key(service, userID, postID)
+    was_known = key in config.emptyContentPosts
+    config.emptyContentPosts[key] = {
+        "postID": postID,
+        "userID": userID,
+        "service": service,
+        "postFolder": postFolder,
+        "post": dict(post),
+    }
+    if not was_known:
+        logger.warning(i18n(
+            f"帖子 {postID} 的 content 为空，已加入待补写队列。",
+            f"Post {postID} has empty content and was queued for content retry.",
+        ))
+
+
+def forget_empty_content_post(config: Config, service: str, userID: str, postID: str):
+    key = empty_content_key(service, userID, postID)
+    config.emptyContentPosts.pop(key, None)
+
+
+def extract_post_from_detail(data, config: Config, postID: str):
+    if not isinstance(data, dict):
+        logger.error(i18n(
+            f"帖子详情 JSON 类型不符合预期: {type(data).__name__}",
+            f"Unexpected post detail JSON type: {type(data).__name__}",
+        ))
+        return None
+
+    if config.kemonoMode:
+        post = data.get("post")
+        if not post:
+            logger.error(i18n(
+                f"返回的数据中没有 'post' 字段，跳过帖子 {postID}。",
+                f"The returned data does not contain a 'post' field; skipping post {postID}.",
+            ))
+            return None
+    else:
+        post = data
+
+    if not isinstance(post, dict):
+        logger.error(i18n(
+            f"帖子对象结构不符合预期，跳过帖子 {postID}。",
+            f"Unexpected post object structure; skipping post {postID}.",
+        ))
+        return None
+
+    return post
+
+
+def retry_empty_content_posts(config: Config, reason: str):
+    if not config.emptyContentPosts:
+        return
+
+    logger.info(i18n(
+        f"开始补抓空 content 帖子（{reason}），待处理: {len(config.emptyContentPosts)}",
+        f"Retrying empty-content posts ({reason}); pending: {len(config.emptyContentPosts)}",
+    ))
+
+    for key, record in list(config.emptyContentPosts.items()):
+        postID = record["postID"]
+        userID = record["userID"]
+        service = record["service"]
+        logger.info(i18n(
+            f"重新执行预访问+API: {postID}",
+            f"Re-running pre-visit + API for post: {postID}",
+        ))
+
+        data = fetch_post_detail_data(postID, userID, service, config)
+        post = extract_post_from_detail(data, config, postID) if data else None
+        if not post:
+            continue
+
+        content = post.get("content")
+        if content is None or content == "":
             logger.info(i18n(
-                f"内容已成功写入文件: {contentPath}",
-                f"Content written successfully: {contentPath}",
+                f"帖子 {postID} 补抓后 content 仍为空。",
+                f"Post {postID} still has empty content after retry.",
             ))
-        except IOError:
+            continue
+
+        merged_post = dict(record.get("post") or {})
+        merged_post.update(post)
+        if write_post_content_file(merged_post, record["postFolder"], config):
+            config.emptyContentPosts.pop(key, None)
+            logger.info(i18n(
+                f"帖子 {postID} 已补写 content。",
+                f"Post {postID} content was written after retry.",
+            ))
+
+
+def maybe_retry_empty_content_posts(config: Config, fetched_count: int):
+    if fetched_count not in config.emptyContentRetryMilestones:
+        return
+    if fetched_count in config.emptyContentRetryMilestonesDone:
+        return
+
+    config.emptyContentRetryMilestonesDone.add(fetched_count)
+    retry_empty_content_posts(config, i18n(
+        f"已获取 {fetched_count} 个帖子",
+        f"after fetching {fetched_count} posts",
+    ))
+
+
+def getPost(postID: str, userID: str, service: str, config: Config):
+    """
+    通过 config 提供的参数（baseUrl, proxies, headers, maxRetries, baseBackoffFactor, folder, targetOS, skipPic, embedCount）
+    """
+    data = fetch_post_detail_data(postID, userID, service, config)
+
+    if not data:
+        logger.error(i18n(
+            "未收到有效数据，终止处理该帖子。",
+            "No valid data was received; stopping this post.",
+        ))
+        return None
+
+    if not isinstance(data, dict):
+        logger.error(i18n(
+            f"帖子详情 JSON 类型不符合预期: {type(data).__name__}",
+            f"Unexpected post detail JSON type: {type(data).__name__}",
+        ))
+        return None
+
+    if config.kemonoMode:
+        post = data.get("post")
+        if not post:
             logger.error(i18n(
-                f"错误: 无法写入文件 {contentPath}",
-                f"Error: unable to write file {contentPath}",
+                "返回的数据中没有 'post' 字段，跳过。",
+                "The returned data does not contain a 'post' field; skipping.",
             ))
-        except Exception as e:
-            logger.error(i18n(
-                f"发生了一个预料之外的错误: {e}",
-                f"An unexpected error occurred: {e}",
+            return None
+    else:
+        post = data
+
+    if not isinstance(post, dict):
+        logger.error(i18n(
+            f"帖子对象结构不符合预期，跳过帖子 {postID}。",
+            f"Unexpected post object structure; skipping post {postID}.",
+        ))
+        return None
+
+    missing_fields = [
+        field_name
+        for field_name in ("published", "title", "id")
+        if not post.get(field_name)
+    ]
+    if missing_fields:
+        logger.error(i18n(
+            f"帖子 {postID} 缺少必要字段 {missing_fields}，跳过。",
+            f"Post {postID} is missing required fields {missing_fields}; skipping.",
+        ))
+        return None
+
+    path, postFolder = build_post_folder_path(post, config)
+    logger.info(i18n(f"\n\n正在取帖子 {path}", f"\n\nFetching post {path}"))
+
+    previews = data.get("previews", [])
+    attachments = data.get("attachments", [])
+    preview_plans, attachment_plans = prepare_attachment_name_plans(
+        previews,
+        attachments,
+        config,
+    )
+
+    if is_attachment_numbering_rename_mode(config):
+        logger.info(i18n(f"准备为已下载附件编号: {path}", f"Preparing to number downloaded attachments for {path}"))
+        if not os.path.exists(postFolder):
+            logger.warning(i18n(
+                f"帖子文件夹不存在，跳过重命名: {postFolder}",
+                f"Post folder does not exist; skipping rename: {postFolder}",
             ))
+            return None
+
+        rename_success = rename_existing_attachment_files(
+            preview_plans + attachment_plans,
+            postFolder,
+        )
+        if not rename_success:
+            logger.warning(i18n(
+                "部分附件未能完成编号重命名，请检查上面的缺失/失败记录。",
+                "Some attachments could not be numbered; check the missing/failed records above.",
+            ))
+        return None
+
+    if not os.path.exists(postFolder):
+        os.makedirs(postFolder)
+        logger.info(i18n(f"已创建文件夹: {postFolder}", f"Created folder: {postFolder}"))
+
+    if write_post_content_file(post, postFolder, config):
+        forget_empty_content_post(config, service, userID, postID)
+    else:
+        remember_empty_content_post(config, postID, userID, service, post, postFolder)
 
     logger.info(i18n(f"准备下载 {path}", f"Preparing downloads for {path}"))
 
     config.embedCount = 0
 
-    for attachment in data.get("previews", []):
-        res = process_attachment(attachment, postFolder, config)
+    for plan in preview_plans:
+        res = process_attachment(plan.attachment, postFolder, config, plan)
         logger.debug(f"process_attachment (preview) result: {res}")
 
-    attachments = data.get("attachments", [])
     if attachments:
-        all_success = process_attachments_batch(attachments, postFolder, config)
+        all_success = process_attachments_batch(attachment_plans, postFolder, config)
         if all_success:
             logger.info(i18n(
                 "所有一般附件均下载成功，继续执行后续操作",
@@ -942,7 +1447,7 @@ def getPostFromPage(
         response = None
         flag = False
         try:
-            response = requests.get(
+            response = config.session.get(
                 profileUrl,
                 proxies=config.proxies,
                 headers=user_page_headers,
@@ -1031,6 +1536,7 @@ def getPostFromPage(
     config.folder = os.path.join(config.folder, userName)
 
     count = o
+    processed_posts = 0
 
     while True:
         if not config.postCounts == 0 and o + 1 > postBegins + config.postCounts - 1:
@@ -1054,7 +1560,7 @@ def getPostFromPage(
             response = None
             flag = False
             try:
-                response = requests.get(
+                response = config.session.get(
                     url,
                     proxies=config.proxies,
                     headers=user_page_headers,
@@ -1155,8 +1661,10 @@ def getPostFromPage(
                 continue
             if config.postCounts == 0 or count < postBegins + config.postCounts - 1:
                 getPost(post.get("id"), post.get("user"), post.get("service"), config)
-                time.sleep(3)
                 count += 1
+                processed_posts += 1
+                maybe_retry_empty_content_posts(config, processed_posts)
+                time.sleep(3)
             else:
                 logger.info(i18n(
                     f"\n\n{config.postCounts}个帖子取完了…",
@@ -1274,6 +1782,54 @@ def parse_bool_arg(value):
     raise argparse.ArgumentTypeError(i18n("需要布尔值: true/false", "Expected a boolean value: true/false"))
 
 
+def parse_number_attachments_arg(value):
+    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "0": NUMBER_ATTACHMENTS_OFF,
+        "false": NUMBER_ATTACHMENTS_OFF,
+        "no": NUMBER_ATTACHMENTS_OFF,
+        "n": NUMBER_ATTACHMENTS_OFF,
+        "off": NUMBER_ATTACHMENTS_OFF,
+        "disable": NUMBER_ATTACHMENTS_OFF,
+        "disabled": NUMBER_ATTACHMENTS_OFF,
+        "关闭": NUMBER_ATTACHMENTS_OFF,
+        "1": NUMBER_ATTACHMENTS_ALL,
+        "true": NUMBER_ATTACHMENTS_ALL,
+        "yes": NUMBER_ATTACHMENTS_ALL,
+        "y": NUMBER_ATTACHMENTS_ALL,
+        "on": NUMBER_ATTACHMENTS_ALL,
+        "enable": NUMBER_ATTACHMENTS_ALL,
+        "enabled": NUMBER_ATTACHMENTS_ALL,
+        "all": NUMBER_ATTACHMENTS_ALL,
+        "开启": NUMBER_ATTACHMENTS_ALL,
+        "全部": NUMBER_ATTACHMENTS_ALL,
+        "image": NUMBER_ATTACHMENTS_IMAGES,
+        "images": NUMBER_ATTACHMENTS_IMAGES,
+        "pic": NUMBER_ATTACHMENTS_IMAGES,
+        "pics": NUMBER_ATTACHMENTS_IMAGES,
+        "picture": NUMBER_ATTACHMENTS_IMAGES,
+        "pictures": NUMBER_ATTACHMENTS_IMAGES,
+        "图片": NUMBER_ATTACHMENTS_IMAGES,
+        "图像": NUMBER_ATTACHMENTS_IMAGES,
+        "rename": NUMBER_ATTACHMENTS_RENAME_ALL,
+        "renumber": NUMBER_ATTACHMENTS_RENAME_ALL,
+        "重命名": NUMBER_ATTACHMENTS_RENAME_ALL,
+        "image_rename": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+        "images_rename": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+        "rename_images": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+        "pic_rename": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+        "图片重命名": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+        "图片模式重命名": NUMBER_ATTACHMENTS_RENAME_IMAGES,
+    }
+    try:
+        return aliases[normalized]
+    except KeyError:
+        raise argparse.ArgumentTypeError(i18n(
+            "编号模式必须是 off/on/image/rename/image_rename，或中文：关闭/开启/图片/重命名/图片模式重命名。",
+            "Numbering mode must be one of off/on/image/rename/image_rename.",
+        ))
+
+
 def parse_args():
     configure_argparse_language()
 
@@ -1375,6 +1931,22 @@ def parse_args():
         help=i18n(
             "启用 Kemono 原始响应结构和附件 server 字段兼容模式（默认: false）",
             "Enable compatibility with Kemono's original response structure and attachment server field (default: false)",
+        ),
+    )
+    parser.add_argument(
+        "--number_attachments",
+        "--number-attachments",
+        dest="number_attachments",
+        type=parse_number_attachments_arg,
+        nargs="?",
+        const=NUMBER_ATTACHMENTS_ALL,
+        default=NUMBER_ATTACHMENTS_OFF,
+        metavar="MODE",
+        help=i18n(
+            "附件编号模式：关闭/off（默认）、开启/on、图片/image、重命名/rename、图片模式重命名/image_rename。"
+            "开启会按附件顺序在文件名前加 00_ 起的编号；两个重命名模式不下载，只给已下载文件编号。",
+            "Attachment numbering mode: off (default), on, image, rename, image_rename. "
+            "When enabled, filenames are prefixed from 00_ by attachment order; rename modes do not download.",
         ),
     )
     parser.add_argument(
@@ -1610,6 +2182,7 @@ def main():
     cfg.baseUrl = args.base_url
     cfg.fileServer = args.file_server
     cfg.kemonoMode = args.kemono_mode
+    cfg.numberAttachmentsMode = args.number_attachments
 
     cfg.maxRetries = args.max_retries
     cfg.baseBackoffFactor = args.base_backoff_factor
@@ -1633,6 +2206,8 @@ def main():
     # 配置 Aria2 RPC 地址 & 启动 aria2c（如需要）
     if args.aria2_rpc_url:
         cfg.aria2_rpc_url = args.aria2_rpc_url
+    elif is_attachment_numbering_rename_mode(cfg):
+        cfg.aria2_rpc_url = LOCAL_ARIA2_RPC_URL
     else:
         cfg.aria2_rpc_url = LOCAL_ARIA2_RPC_URL
         aria2_process = start_aria2_process(currentProxyUrlStr)
@@ -1646,6 +2221,10 @@ def main():
     logger.info(i18n(f"基础 URL: {cfg.baseUrl}", f"Base URL: {cfg.baseUrl}"))
     logger.info(i18n(f"文件服务器 URL: {cfg.fileServer}", f"File Server URL: {cfg.fileServer}"))
     logger.info(i18n(f"Kemono 模式: {cfg.kemonoMode}", f"Kemono Mode: {cfg.kemonoMode}"))
+    logger.info(i18n(
+        f"附件编号模式: {cfg.numberAttachmentsMode}",
+        f"Attachment numbering mode: {cfg.numberAttachmentsMode}",
+    ))
     logger.info(i18n(f"最大重试次数: {cfg.maxRetries}", f"MAX_RETRIES: {cfg.maxRetries}"))
     logger.info(i18n(
         f"基础退避系数: {cfg.baseBackoffFactor}",
@@ -1671,6 +2250,7 @@ def main():
     try:
         getPostFromPage(userid, service, postBegins, cfg)
     finally:
+        retry_empty_content_posts(cfg, i18n("结束时", "at end"))
         stop_aria2_process()
 
 

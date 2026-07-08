@@ -130,6 +130,7 @@ KemonoDownloader.exe 12345678 fanbox
 | `--post_counts`         | 下载帖子数量（0 表示全部）                  | `0`                             |
 | `--aria2-rpc-url`       | Aria2 JSON-RPC 地址                         | `http://localhost:6888/jsonrpc` |
 | `--kemono_mode`         | Kemono复活时的兼容性选项                    | `false`                         |
+| `--number_attachments`  | 附件编号模式：`off`/`on`/`image`/`rename`/`image_rename`，也支持中文模式名 | `off`                           |
 
 ### 语言配置
 
@@ -179,6 +180,22 @@ python main.py 12345678 fanbox --proxy_url http://127.0.0.1:7897
 ```bash
 # 从第 10 个帖子开始，下载 20 个帖子
 python main.py 12345678 fanbox --post_begins 10 --post_counts 20
+```
+
+### 附件编号
+
+`--number_attachments` 默认关闭。可选模式：
+
+- `on` / `开启`：为所有附件文件名前追加顺序编号。
+- `image` / `图片`：仅为图片类型附件追加编号。
+- `rename` / `重命名`：不执行下载，只获取帖子信息并为已下载的附件文件编号。
+- `image_rename` / `图片模式重命名`：不执行下载，只为已下载的图片类型附件编号。
+
+编号从 `00_` 开始，默认两位；如果附件数量超过两位数，则使用附件数量的位数，例如 `000_`。
+
+```bash
+python main.py 12345678 fanbox --number_attachments on
+python main.py 12345678 fanbox --number_attachments 图片模式重命名
 ```
 
 

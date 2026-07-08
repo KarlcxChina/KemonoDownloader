@@ -112,6 +112,7 @@ If the attachments of a crawled post have not been archived by Pawchive, the pro
 | `--post_counts`         | Number of posts to download (`0` means all posts)                             | `0`                             |
 | `--aria2-rpc-url`       | Aria2 JSON-RPC address                                                        | `http://localhost:6888/jsonrpc` |
 | `--kemono_mode`         | Compatibility option for use if Kemono comes back online                      | `false`                         |
+| `--number_attachments`  | Attachment numbering mode: `off`/`on`/`image`/`rename`/`image_rename`         | `off`                           |
 
 ### Language Configuration
 
@@ -159,6 +160,22 @@ python main.py 12345678 fanbox --proxy_url http://127.0.0.1:7897
 ```bash
 # Start from the 10th post and download 20 posts
 python main.py 12345678 fanbox --post_begins 10 --post_counts 20
+```
+
+### Attachment Numbering
+
+`--number_attachments` is disabled by default. Available modes:
+
+- `on`: prefix all attachment filenames by attachment order.
+- `image`: prefix only image attachment filenames.
+- `rename`: do not download; fetch post metadata and number already downloaded attachment files.
+- `image_rename`: do not download; number only already downloaded image attachment files.
+
+Numbering starts at `00_` and uses two digits by default. If the attachment count needs more digits, the count width is used instead, such as `000_`.
+
+```bash
+python main.py 12345678 fanbox --number_attachments on
+python main.py 12345678 fanbox --number_attachments image_rename
 ```
 
 ## Output Structure
