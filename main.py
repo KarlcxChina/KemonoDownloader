@@ -586,6 +586,18 @@ def get_attachment_source_name(attachment: dict) -> str:
     return "attachment"
 
 
+def is_deferred_attachment(attachment: dict) -> bool:
+    return attachment.get("deferred") is True
+
+
+def log_deferred_attachment_error(attachment_name: str) -> None:
+    logger.error(i18n(
+        f"附件 {attachment_name} 标记为 deferred=true；Pawchive 并未存储该文件，已跳过下载。",
+        f"Attachment {attachment_name} is marked deferred=true; "
+        "Pawchive did not store this file, so the download was skipped.",
+    ))
+
+
 def get_attachment_extension(attachment: dict) -> str:
     for key in ("name", "path", "url"):
         value = attachment.get(key)
@@ -756,14 +768,21 @@ def submit_all_attachments(
         attachment_plans: List[AttachmentNamePlan],
         targetFolder: str,
         config: Config,
-) -> List[DownloadTask]:
+) -> tuple[List[DownloadTask], bool]:
     """
-    先循环提交所有附件，记录 GID，返回 DownloadTask 列表。
+    先循环提交所有附件，记录 GID，返回 DownloadTask 列表和提交结果。
     """
     tasks: List[DownloadTask] = []
+    all_submitted = True
     for plan in attachment_plans:
         attachment = plan.attachment
         attachmentName = plan.download_name
+
+        if is_deferred_attachment(attachment):
+            log_deferred_attachment_error(attachmentName)
+            all_submitted = False
+            continue
+
         path = attachment.get("path")
         server = get_attachment_server(attachment, config)
 
@@ -793,11 +812,12 @@ def submit_all_attachments(
                 )
             )
         except Exception as e:
+            all_submitted = False
             logger.error(i18n(
                 f"提交附件 {attachmentName} 到 Aria2 时失败: {e}",
                 f"Failed to submit attachment {attachmentName} to Aria2: {e}",
             ))
-    return tasks
+    return tasks, all_submitted
 
 
 def poll_and_retry_tasks(
@@ -970,8 +990,9 @@ def process_attachments_batch(
       1. 先统一提交任务并记录 GID；
       2. 再统一轮询所有 GID 的状态并按需重试。
     """
-    tasks = submit_all_attachments(attachment_plans, postFolder, config)
-    return poll_and_retry_tasks(tasks, config)
+    tasks, all_submitted = submit_all_attachments(attachment_plans, postFolder, config)
+    downloads_succeeded = poll_and_retry_tasks(tasks, config)
+    return all_submitted and downloads_succeeded
 
 
 # ---------------------------
@@ -987,6 +1008,13 @@ def process_attachment(
     attachmentName = name_plan.download_name if name_plan else fallbackName
     sourceName = name_plan.source_name if name_plan else fallbackName
     att_type = attachment.get("type")
+
+    if is_deferred_attachment(attachment):
+        log_deferred_attachment_error(attachmentName)
+        return i18n(
+            f"跳过 Pawchive 未存储的附件: {attachmentName}",
+            f"Skipped attachment not stored by Pawchive: {attachmentName}",
+        )
 
     if att_type == "thumbnail":
         if attachment.get("name") == "https://mega.nz/rich-folder.png":
@@ -1362,7 +1390,9 @@ def getPost(postID: str, userID: str, service: str, config: Config):
         config,
     )
 
-    if is_attachment_numbering_rename_mode(config):
+    origin_is_kemono = str(post.get("origin") or "").strip().lower() == "kemono"
+
+    if is_attachment_numbering_rename_mode(config) and not origin_is_kemono:
         logger.info(i18n(f"准备为已下载附件编号: {path}", f"Preparing to number downloaded attachments for {path}"))
         if not os.path.exists(postFolder):
             logger.warning(i18n(
@@ -1391,6 +1421,15 @@ def getPost(postID: str, userID: str, service: str, config: Config):
     else:
         remember_empty_content_post(config, postID, userID, service, post, postFolder)
 
+    if origin_is_kemono:
+        logger.warning(i18n(
+            f"帖子 {postID} 仅来自 Kemono 镜像；将只记录帖子内容，"
+            "并跳过该帖的所有文件下载。",
+            f"Post {postID} is available only through the Kemono mirror; "
+            "only its content will be recorded, and all file downloads will be skipped.",
+        ))
+        return None
+
     logger.info(i18n(f"准备下载 {path}", f"Preparing downloads for {path}"))
 
     config.embedCount = 0
@@ -1408,8 +1447,10 @@ def getPost(postID: str, userID: str, service: str, config: Config):
             ))
         else:
             logger.error(i18n(
-                "存在附件下载失败（已按规则重试），继续执行后续操作时请注意处理失败情况",
-                "Some attachments failed after retries; continuing, but please review the failures.",
+                "存在附件未能下载（文件未存储、提交失败或重试耗尽），"
+                "继续执行后续操作时请注意上述错误。",
+                "Some attachments could not be downloaded because the file was not stored, "
+                "submission failed, or retries were exhausted; continuing, but please review the errors above.",
             ))
     else:
         logger.info(i18n("该帖子没有一般附件。", "This post has no regular attachments."))
