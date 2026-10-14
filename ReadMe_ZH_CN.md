@@ -8,6 +8,44 @@
 
 
 
+## 首次使用：配置联系方式偏好
+
+应网站运营方要求（https://t.me/pawchivest/17），我们添加了配置联系方式功能。
+
+开始下载前先执行 `python main.py -email`，可执行文件则运行 `./KemonoDownloader.exe -email`。
+此步骤是必须的，但是您也可以选择不提供邮箱。
+进入配置后按回车即可跳过。之后可使用同一命令修改邮箱或通过跳过重置为空。
+
+Windows 配置保存在 `%APPDATA%\KemonoDownloader\config.json`
+Linux 保存在 `$XDG_CONFIG_HOME/KemonoDownloader/config.json`，默认 `~/.config/KemonoDownloader/config.json`。
+配置缺失时，程序会报错退出。
+
+
+### 下载提交间隔与推荐限制
+
+应网站运营方要求（https://t.me/pawchivest/17），我们添加了下载任务和并发相关的限制。
+
+程序默认在每个下载任务提交之间间隔1秒
+
+默认的 `aria2.conf` 配置文件中，限制最多 5 个活跃下载，每个文件使用 1 个连接：
+
+```ini
+max-concurrent-downloads=5
+max-connection-per-server=1
+split=1
+```
+
+虽然不建议您以超过服务方推荐的速率下载，但是我们显然无法阻止您修改代码以绕过限制。
+所以您可以使用 `--not-recommended-override-download-limmit-config true` 绕过限制。
+默认情况下，间隔小于 1 秒、活跃下载上限大于 5、每服务器连接数或分片连接数大于 1，都会报错退出。只有显式传入 `true` 才允许超过推荐限制；开关本身不会提高并发或缩短间隔：
+
+```bash
+python main.py 12345678 fanbox --download-submit-interval 0.5 --not-recommended-override-download-limmit-config true
+```
+
+不推荐覆盖限制，请遵守文件服务器的使用要求。非法数值仍会被拒绝。本地 Aria2 启动前会检查 `aria2.conf`，连接成功后会检查实际全局配置；外部 `--aria2-rpc-url` 实例也必须通过检查，否则程序停止提交。程序不会修改外部实例的全局设置，需自行配置该实例。本程序提交的新任务会显式使用检查过的每文件连接设置。纯重命名模式跳过 Aria2 检查。
+
+
 ## 功能特性
 
 - 批量下载指定创作者的所有帖子及附件
@@ -131,6 +169,8 @@ KemonoDownloader.exe 12345678 fanbox
 | `--aria2-rpc-url`       | Aria2 JSON-RPC 地址                                          | `http://localhost:6888/jsonrpc` |
 | `--kemono_mode`         | Kemono复活时的兼容性选项                                     | `false`                         |
 | `--number_attachments`  | 附件编号模式：`off`/`on`/`image`/`rename`/`image_rename`，也支持中文模式名 | `off`                           |
+| `--download-submit-interval`                          | 同一程序运行中，两次向 Aria2 提交下载任务的时间相隔                           | `1`                             |
+| `--not-recommended-override-download-limmit-config`   | （不推荐）允许程序以超越网站运营方推荐值的并发运行                            | `false`                           |
 
 ### 语言配置
 

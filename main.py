@@ -3,6 +3,8 @@ import atexit
 import html
 import json
 import locale
+import math
+import threading
 import os
 import platform
 import signal
@@ -13,6 +15,9 @@ import logging
 import unicodedata
 import re
 import subprocess
+import sys
+import tempfile
+from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import requests
@@ -124,6 +129,101 @@ def configure_argparse_language() -> None:
 # ---------------------------
 # 配置类 & 常量
 # ---------------------------
+PROJECT_URL = "https://github.com/KarlcxChina/KemonoDownloader"
+EMAIL_DECLINED = "reject"
+
+
+def email_config_path() -> Path:
+    if os.name == "nt":
+        root = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        root = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return root / "KemonoDownloader" / "config.json"
+
+
+def valid_email(value) -> bool:
+    """Basic ASCII validation, excluding characters unsafe in a UA comment."""
+    if not isinstance(value, str) or not 3 <= len(value) <= 254 or value.count("@") != 1:
+        return False
+    local, domain = value.split("@")
+    if not 1 <= len(local) <= 64 or not re.fullmatch(r"[A-Za-z0-9_+.!#$%&'*=/^`{|}~-]+", local):
+        return False
+    if local.startswith(".") or local.endswith(".") or ".." in local:
+        return False
+    labels = domain.split(".")
+    return len(labels) >= 2 and all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in labels
+    )
+
+
+def build_user_agent(email: str = EMAIL_DECLINED) -> str:
+    contact = f"; contact: {email}" if valid_email(email) else ""
+    return f"KemonoDownloader (+{PROJECT_URL}{contact})"
+
+
+def load_email_preference() -> str:
+    try:
+        data = json.loads(email_config_path().read_text(encoding="utf-8"))
+        email = data.get("email") if isinstance(data, dict) else None
+        if email == EMAIL_DECLINED or valid_email(email):
+            return email
+    except (OSError, ValueError):
+        pass
+    program = os.path.basename(sys.argv[0])
+    logger.error(i18n(
+        f"您暂未配置邮箱偏好，请执行 './{program} -email'配置联系方式偏好后再运行程序",
+        f"Email preference is not configured. Run './{program} -email' before running the program.",
+    ))
+    raise SystemExit(1)
+
+
+def configure_email_preference() -> None:
+    print(i18n(
+        "联系方式（可选）\n应网站运营方要求，推荐您填写联系邮箱\n"
+        "通知链接：https://t.me/pawchivest/17\n"
+        "邮箱会随下载请求发送，我们推荐您填写\n"
+        "若您不想留下联系邮箱，直接跳过即可\n",
+        "Contact information (optional)\nThe site operator recommends providing a contact email.\n"
+        "Notice: https://t.me/pawchivest/17\n"
+        "Your email will be sent with download requests; we recommend providing one.\n"
+        "If you do not want to provide an email, simply skip.\n",
+    ))
+    try:
+        email = input(i18n("您的邮箱（按回车跳过）：", "Your email (press Enter to skip): "))
+    except (EOFError, KeyboardInterrupt):
+        logger.error(i18n("邮箱配置已取消，未保存。", "Email configuration cancelled; nothing saved."))
+        raise SystemExit(1)
+    if not valid_email(email):
+        print(i18n("邮箱格式不正确，视为跳过。", "Invalid email format; treating as skipped."))
+        email = EMAIL_DECLINED
+    path = email_config_path()
+    temporary_path = None
+    try:
+        data = {}
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    data = existing
+            except ValueError:
+                pass
+        data["email"] = email
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as output:
+            temporary_path = Path(output.name)
+            json.dump(data, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        os.replace(temporary_path, path)
+    except OSError as exc:
+        logger.error(i18n(f"无法保存邮箱偏好：{exc}", f"Cannot save email preference: {exc}"))
+        raise SystemExit(1)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+    print(i18n("感谢您的配合，联系方式偏好已保存。", "Thank you. Your contact preference has been saved."))
+
+
 LOCAL_ARIA2_RPC_URL = "http://localhost:6888/jsonrpc"
 ARIANG_OFFICIAL_DEMO_BASE_URL = "https://ariang.mayswind.net/latest"
 
@@ -150,6 +250,76 @@ IMAGE_ATTACHMENT_EXTENSIONS = {
 }
 
 
+class DownloadSubmissionLimiter:
+    """Space addUri attempts across all attachment types, including retries."""
+
+    def __init__(self, interval: float = 1.0):
+        self.interval = interval
+        self.last_submission = None
+        self.lock = threading.Lock()
+
+    def submit(self, callback):
+        with self.lock:
+            if self.last_submission is not None:
+                remaining = self.interval - (time.monotonic() - self.last_submission)
+                while remaining > 0:
+                    time.sleep(remaining)
+                    remaining = self.interval - (time.monotonic() - self.last_submission)
+            # Failed/ambiguous RPC attempts also consume a slot.
+            self.last_submission = time.monotonic()
+            return callback()
+
+
+_default_submission_limiter = DownloadSubmissionLimiter()
+DOWNLOAD_RECOMMENDED_LIMITS = {
+    "max-concurrent-downloads": 5,
+    "max-connection-per-server": 1,
+    "split": 1,
+}
+
+
+def validate_download_limits(options, allow_override=False):
+    for name, recommended in DOWNLOAD_RECOMMENDED_LIMITS.items():
+        try:
+            value = int(options[name])
+        except (ValueError, TypeError, OverflowError) as error:
+            raise ValueError(i18n(
+                f"{name} 的值无效：{options[name]!r}，必须为整数",
+                f"Invalid {name}: {options[name]!r}; must be an integer",
+            )) from error
+        if value < 1 or (name == "max-connection-per-server" and value > 16):
+            raise ValueError(i18n(f"{name} 的值无效：{value}", f"Invalid {name}: {value}"))
+        if value > recommended and not allow_override:
+            raise ValueError(i18n(
+                f"{name}={value} 超过推荐上限 {recommended}；"
+                "需要显式设置 --not-recommended-override-download-limmit-config true",
+                f"{name}={value} exceeds recommended limit {recommended}; "
+                "requires --not-recommended-override-download-limmit-config true",
+            ))
+
+
+def read_local_download_limits():
+    # aria2 defaults when a setting is omitted from its configuration.
+    options = {"max-concurrent-downloads": "5", "max-connection-per-server": "1", "split": "5"}
+    for line in Path("aria2.conf").read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() in options:
+            options[name.strip()] = value.strip()
+    return options
+
+
+def configure_download_limits(config, allow_override=False):
+    response = aria2_rpc_call("aria2.getGlobalOption", [], aria2_rpc_url=config.aria2_rpc_url, timeout=10)
+    options = response["result"]
+    validate_download_limits(options, allow_override)
+    config.downloadOptions = {
+        name: str(options[name]) for name in ("max-connection-per-server", "split")
+    }
+
+
 @dataclass
 class Config:
     postCounts: int = 0
@@ -173,19 +343,14 @@ class Config:
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
-            "Sec-CH-UA": '"Microsoft Edge";v="146", "Chromium";v="146", "Not=A?Brand";v="24"',
-            "Sec-CH-UA-Mobile": "?0",
-            "Sec-CH-UA-Platform": '"Windows"',
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
-            ),
+            "User-Agent": build_user_agent(),
         }
     )
+    submissionLimiter: DownloadSubmissionLimiter = field(default_factory=DownloadSubmissionLimiter)
+    downloadOptions: Dict[str, str] = field(default_factory=lambda: {"max-connection-per-server": "1", "split": "1"})
     aria2_rpc_url: str = LOCAL_ARIA2_RPC_URL
     session: requests.Session = field(default_factory=requests.Session)
     emptyContentPosts: Dict[str, dict] = field(default_factory=dict)
@@ -466,6 +631,9 @@ def downloadRes(
         aria2_token: str = None,
         sourceAttachmentName: str | None = None,
         targetOS: str = "windows",
+        userAgent: str | None = None,
+        submissionLimiter: DownloadSubmissionLimiter | None = None,
+        downloadOptions: Dict[str, str] | None = None,
 ) -> str:
     """
     使用 aria2 RPC 添加下载任务，返回 aria2 分配的 GID。
@@ -480,6 +648,8 @@ def downloadRes(
     options = {
         "dir": targetFolder,
         "out": attachmentName,
+        "user-agent": userAgent or build_user_agent(),
+        **(downloadOptions or {"max-connection-per-server": "1", "split": "1"}),
     }
 
     params = []
@@ -497,7 +667,9 @@ def downloadRes(
         "params": params,
     }
 
-    response = requests.post(aria2_rpc_url, json=payload)
+    response = (submissionLimiter or _default_submission_limiter).submit(
+        lambda: requests.post(aria2_rpc_url, json=payload)
+    )
     response.raise_for_status()
     res_json = response.json()
     logger.info(i18n(
@@ -796,6 +968,9 @@ def submit_all_attachments(
                 aria2_token=None,
                 sourceAttachmentName=plan.source_name,
                 targetOS=config.targetOS,
+                userAgent=config.headers["User-Agent"],
+                submissionLimiter=config.submissionLimiter,
+                downloadOptions=config.downloadOptions,
             )
             logger.info(i18n(
                 f"成功提交附件: {attachmentName}, GID={gid}",
@@ -938,6 +1113,9 @@ def poll_and_retry_tasks(
                         aria2_token=None,
                         sourceAttachmentName=task.sourceName,
                         targetOS=config.targetOS,
+                        userAgent=config.headers["User-Agent"],
+                        submissionLimiter=config.submissionLimiter,
+                        downloadOptions=config.downloadOptions,
                     )
                     logger.info(
                         i18n(
@@ -1032,6 +1210,9 @@ def process_attachment(
                 aria2_token=None,
                 sourceAttachmentName=sourceName,
                 targetOS=config.targetOS,
+                userAgent=config.headers["User-Agent"],
+                submissionLimiter=config.submissionLimiter,
+                downloadOptions=config.downloadOptions,
             )
             return i18n(
                 f"成功处理图片附件: {attachmentName}",
@@ -1888,10 +2069,12 @@ def parse_args():
     )
     parser.add_argument(
         "userid",
+        nargs="?",
         help=i18n("需要下载的用户的ID (必填)", "Target user ID (required)"),
     )
     parser.add_argument(
         "service",
+        nargs="?",
         help=i18n("服务名称，如 fanbox/patreon (必填)", "Service name, such as fanbox/patreon (required)"),
     )
     parser.add_argument(
@@ -2008,7 +2191,35 @@ def parse_args():
         ),
     )
 
+    parser.add_argument("--download-submit-interval", type=float, default=1.0, help=i18n(
+        "下载任务提交间隔（秒，默认 1）", "Download submission interval in seconds (default: 1)",
+    ))
+    parser.add_argument("--not-recommended-override-download-limmit-config",
+                        choices=("true", "false"), default="false", help=i18n(
+        "允许超过推荐下载限制（不推荐，默认 false）",
+        "Allow exceeding recommended download limits (not recommended; default: false)",
+    ))
+    parser.add_argument("-email", "--email", action="store_true", help=i18n(
+        "联系方式偏好配置", "Configure contact preference and exit",
+    ))
     args = parser.parse_args()
+    if args.email:
+        configure_email_preference()
+        raise SystemExit(0)
+    args.allow_download_limit_override = args.not_recommended_override_download_limmit_config == "true"
+    if not math.isfinite(args.download_submit_interval) or args.download_submit_interval < 0:
+        parser.error(i18n(
+            "--download-submit-interval 必须为有限的非负数",
+            "--download-submit-interval must be finite and non-negative",
+        ))
+    if args.download_submit_interval < 1 and not args.allow_download_limit_override:
+        parser.error(i18n(
+            "提交间隔小于 1 秒时，需要显式设置 --not-recommended-override-download-limmit-config true",
+            "Intervals below 1 second require --not-recommended-override-download-limmit-config true",
+        ))
+    args.contact_email = load_email_preference()
+    if args.userid is None or args.service is None:
+        parser.error(i18n("缺少必需参数: userid, service", "the following arguments are required: userid, service"))
 
     return args
 
@@ -2223,6 +2434,8 @@ def main():
     service = args.service
 
     cfg = Config()
+    cfg.submissionLimiter.interval = args.download_submit_interval
+    cfg.headers["User-Agent"] = build_user_agent(args.contact_email)
     cfg.baseUrl = args.base_url
     cfg.fileServer = args.file_server
     cfg.kemonoMode = args.kemono_mode
@@ -2254,8 +2467,25 @@ def main():
         cfg.aria2_rpc_url = LOCAL_ARIA2_RPC_URL
     else:
         cfg.aria2_rpc_url = LOCAL_ARIA2_RPC_URL
+        try:
+            validate_download_limits(read_local_download_limits(), args.allow_download_limit_override)
+        except (OSError, ValueError, KeyError) as error:
+            logger.error(i18n("下载配置无效：%s", "Invalid download configuration: %s"), error)
+            raise SystemExit(1)
         aria2_process = start_aria2_process(currentProxyUrlStr)
         register_aria2_cleanup(aria2_process, cfg.aria2_rpc_url)
+
+    if not is_attachment_numbering_rename_mode(cfg):
+        try:
+            configure_download_limits(cfg, args.allow_download_limit_override)
+        except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+            logger.error(i18n("无法验证 Aria2 下载限制：%s", "Cannot validate Aria2 download limits: %s"), error)
+            stop_aria2_process()
+            raise SystemExit(1)
+        if args.allow_download_limit_override:
+            logger.warning(i18n("已允许覆盖推荐下载限制，请遵守文件服务器要求。",
+                                "Recommended download limits may be overridden; respect the file server's rules."))
+        logger.info(i18n("下载任务提交间隔：%s 秒", "Download submission interval: %s s"), cfg.submissionLimiter.interval)
 
     init_file_logger(cfg.folder)
 

@@ -8,6 +8,44 @@ Since Kemono has stopped providing download services, the default download sourc
 
 [**Pawchive**](https://pawchive.pw/) is a mirror of Kemono.cr. It preserves all thumbnails and text resources after Kemono stopped its download service.
 
+## First Use: Configure Your Contact Preference
+
+Contact preference configuration was added at the site operator's request ([announcement](https://t.me/pawchivest/17)).
+
+Before downloading, run `python main.py -email`, or `./KemonoDownloader.exe -email` if you use the executable. This setup step is required, but providing an email address is optional. Press Enter to skip. You can run the same command later to change your email address or clear it by skipping.
+
+Preferences are stored in `%APPDATA%\KemonoDownloader\config.json` on Windows and `$XDG_CONFIG_HOME/KemonoDownloader/config.json` on Linux (default: `~/.config/KemonoDownloader/config.json`). If the configuration is missing or the saved preference is invalid, the program exits with an error.
+
+If provided, your email address is included in the User-Agent for API requests and Aria2 downloads, including remote Aria2 tasks, and may be recorded by those servers. If you skip, the User-Agent contains only the tool name and project URL.
+
+### Download Submission Interval and Recommended Limits
+
+Download submission and concurrency limits were added at the site operator's request ([announcement](https://t.me/pawchivest/17)).
+
+`--download-submit-interval` defaults to `1` second. Starts of successive Aria2 download submissions within one program run are spaced at least this far apart. Attachments, thumbnails, and application resubmissions share the limiter; the first submission is immediate. For a longer interval:
+
+```bash
+python main.py 12345678 fanbox --download-submit-interval 2
+```
+
+The default `aria2.conf` allows up to 5 active downloads, with one connection per file:
+
+```ini
+max-concurrent-downloads=5
+max-connection-per-server=1
+split=1
+```
+
+`--not-recommended-override-download-limmit-config` accepts `true` / `false` and defaults to `false` (the spelling `limmit` is intentional). By default, intervals below 1 second, concurrency above 5, or either connection setting above 1 cause an error. Lower concurrency and longer intervals are allowed. Only explicit `true` permits exceeding these recommendations; the switch itself does not increase concurrency or reduce the interval:
+
+```bash
+python main.py 12345678 fanbox --download-submit-interval 0.5 --not-recommended-override-download-limmit-config true
+```
+
+Overrides are not recommended; respect the file server's rules. Invalid numeric values remain rejected. Local configuration is checked before starting Aria2, and effective global options are checked after connecting. External `--aria2-rpc-url` instances must also pass validation before submissions begin. The program does not modify external global settings; configure that instance yourself. New tasks explicitly receive the checked per-file connection settings. Rename-only modes skip Aria2 validation.
+
+This limits application submissions, not every HTTP request made internally by Aria2. Internal retries, redirects, existing/resumed jobs, and tasks from other programs are outside this interval limiter. Runtime changes to external settings are not continuously monitored. This does not guarantee a strict file-server request rate.
+
 ## Featuresf
 
 - Batch-download all posts and attachments from a specified creator.
@@ -113,6 +151,8 @@ If the attachments of a crawled post have not been archived by Pawchive, the pro
 | `--aria2-rpc-url`       | Aria2 JSON-RPC address                                       | `http://localhost:6888/jsonrpc` |
 | `--kemono_mode`         | Compatibility option for use if Kemono comes back online     | `false`                         |
 | `--number_attachments`  | Attachment numbering mode: `off`/`on`/`image`/`rename`/`image_rename` | `off`                           |
+| `--download-submit-interval` | Minimum interval between successive Aria2 download submissions within one program run (seconds) | `1` |
+| `--not-recommended-override-download-limmit-config` | Allow download settings above the site operator's recommended limits (not recommended; accepts `true`/`false`) | `false` |
 
 ### Language Configuration
 
